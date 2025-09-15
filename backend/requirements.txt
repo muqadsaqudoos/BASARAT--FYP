@@ -1,27 +1,19 @@
+# --- Web framework ---
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-python-multipart==0.0.6
-pillow==10.1.0
-opencv-python==4.8.1.78
-ultralytics==8.0.196
-torch==2.1.0
-torchvision==0.16.0
-numpy==1.24.3
-pydantic==2.5.0
-python-dotenv==1.0.0
-aiofiles==23.2.1
 
-# OCR Libraries
-easyocr==1.7.0
+# --- ML / Deep Learning ---
+torch>=2.0.0
+torchvision>=0.15.0
+ultralytics==8.1.0   # YOLOv8
+
+# --- OCR ---
+easyocr==1.7.1
 pytesseract==0.3.10
+Pillow>=9.5.0
 
-# Text-to-Speech
-pyttsx3==2.90
-gtts==2.4.0
-playsound==1.3.0
 
-# Text Processing
-textblob==0.17.1
-
-# GUI Framework (PyQt5)
-PyQt5==5.15.10
+# --- Utils ---
+numpy>=1.24.0
+pydantic==1.10.13
+python-multipart==0.0.6   # for file uploads

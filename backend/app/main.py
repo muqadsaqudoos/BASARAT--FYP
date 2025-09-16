@@ -33,6 +33,22 @@ logger.info("Loading models...")
 yolo = YOLOModel(model_path=MODEL_PATH, conf_threshold=DEFAULT_CONFIDENCE)
 ocr = OCRProcessor()
 
+# Optional: standalone OCR endpoint
+@app.post("/ocr")
+async def read_text(file: UploadFile = File(...)):
+    """Run OCR only (no YOLO)"""
+    content = await file.read()
+    try:
+        img = Image.open(io.BytesIO(content)).convert("RGB")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid image file.")
+    try:
+        text = ocr.extract_text(img)
+    except Exception as e:
+        logger.exception("OCR failed: %s", e)
+        raise HTTPException(status_code=500, detail="OCR failed.")
+    return {"text": text}
+
 
 @app.get("/", summary="Health check")
 async def root():

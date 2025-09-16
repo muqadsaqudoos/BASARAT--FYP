@@ -16,9 +16,15 @@ BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = os.environ.get("MODEL_PATH", str(BASE_DIR.parent / "models" / "yolo_model.pt"))
 DEFAULT_CONFIDENCE = float(os.environ.get("DEFAULT_CONFIDENCE", 0.35))
 
+
 # OCR Configuration
-OCR_ENGINE = os.environ.get("OCR_ENGINE", "easyocr")  # "easyocr" or "tesseract"
+OCR_ENGINE = os.environ.get("OCR_ENGINE", "easyocr")
 OCR_LANGUAGE = os.environ.get("OCR_LANGUAGE", "en")
+OCR_MODEL_DIR = os.environ.get(
+    "OCR_MODEL_DIR",
+    str(BASE_DIR.parent / "models" / "easyocr")
+)
+
 
 # File Upload Configuration
 MAX_FILE_SIZE = int(os.environ.get("MAX_FILE_SIZE", 10 * 1024 * 1024))  # 10MB

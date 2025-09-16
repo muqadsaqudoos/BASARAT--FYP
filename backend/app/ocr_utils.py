@@ -4,7 +4,7 @@ from typing import Optional
 from PIL import Image
 import numpy as np
 
-from app.config import OCR_ENGINE, OCR_LANGUAGE
+from app.config import OCR_ENGINE, OCR_LANGUAGE, OCR_MODEL_DIR
 
 logger = logging.getLogger("ocr_utils")
 logger.setLevel(logging.INFO)
@@ -24,7 +24,11 @@ class OCRProcessor:
             try:
                 import easyocr
                 logger.info("Initializing EasyOCR (lang=%s)", self.lang)
-                self._reader = easyocr.Reader([self.lang], gpu=False)
+                self._reader = easyocr.Reader(
+                    [lang.strip() for lang in self.lang.split(",")],
+                    gpu=False,
+                    model_storage_directory=OCR_MODEL_DIR
+                )
             except Exception as e:
                 logger.exception("EasyOCR init failed: %s", e)
                 self._reader = None

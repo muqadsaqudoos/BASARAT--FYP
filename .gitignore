@@ -272,3 +272,8 @@ __marimo__/
 
 
 # FRONTEND
+
+# allow frontend lib
+!frontend/lib/
+!frontend/lib/**
+

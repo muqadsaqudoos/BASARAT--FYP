@@ -24,7 +24,7 @@ samples, guidance on mobile development, and a full API reference.
 
 
 
-# BASARAT - FYP (Blind Vision Frontend)
+# BASARAT - FYP (Blind Vision Backend)
 
 
 

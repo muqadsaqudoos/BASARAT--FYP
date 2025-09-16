@@ -32,6 +32,10 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
+  camera: ^0.10.5+9
+  flutter_tts: ^3.8.5
+  provider: ^6.1.1
+  dio: ^5.4.0
 
 dev_dependencies:
   flutter_test:

@@ -9,16 +9,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from PIL import Image
 
-from app.config import UPLOAD_DIR, MAX_FILE_SIZE, CORS_ORIGINS, MODEL_PATH, DEFAULT_CONFIDENCE, HOST, PORT, DEBUG
-from app.model_utils import YOLOModel
+from app.config import UPLOAD_DIR, MAX_FILE_SIZE, CORS_ORIGINS, HOST, PORT, DEBUG
 from app.ocr_utils import OCRProcessor
 
+# --- Logging setup ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("backend.main")
 
+# Ensure upload directory exists
 Path(UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Basarat YOLO+OCR API", version="1.0.0")
+# --- FastAPI app ---
+app = FastAPI(title="Basarat OCR API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,15 +30,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize model + OCR
-logger.info("Loading models...")
-yolo = YOLOModel(model_path=MODEL_PATH, conf_threshold=DEFAULT_CONFIDENCE)
+# --- Initialize OCR only ---
+logger.info("Starting OCR engine (YOLO disabled)...")
 ocr = OCRProcessor()
 
-# Optional: standalone OCR endpoint
+# --- OCR endpoint ---
 @app.post("/ocr")
 async def read_text(file: UploadFile = File(...)):
-    """Run OCR only (no YOLO)"""
+    """Run OCR and return extracted text"""
     content = await file.read()
     try:
         img = Image.open(io.BytesIO(content)).convert("RGB")
@@ -50,15 +51,17 @@ async def read_text(file: UploadFile = File(...)):
     return {"text": text}
 
 
+# --- Health check ---
 @app.get("/", summary="Health check")
 async def root():
     return {
-        "message": "Basarat YOLO+OCR backend",
-        "yolo_loaded": yolo.is_loaded(),
+        "message": "Basarat OCR backend",
+        "yolo_loaded": False,  # Always false (disabled)
         "ocr_engine": ocr.engine,
     }
 
 
+# --- OCR-only predict endpoint ---
 class PredictResponse(BaseModel):
     detections: list
     text: str
@@ -70,8 +73,8 @@ def _validate_file_size(file_bytes: bytes):
 
 
 @app.post("/predict/", response_model=PredictResponse)
-async def predict(image: UploadFile = File(...), conf: float = DEFAULT_CONFIDENCE):
-    """Accept an image and return YOLO detections + OCR text"""
+async def predict(image: UploadFile = File(...)):
+    """Accept an image and return OCR text (YOLO disabled)"""
     contents = await image.read()
     _validate_file_size(contents)
 
@@ -80,22 +83,7 @@ async def predict(image: UploadFile = File(...), conf: float = DEFAULT_CONFIDENC
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid image file.")
 
-    try:
-        conf_val = float(conf)
-        if not (0 < conf_val < 1):
-            conf_val = DEFAULT_CONFIDENCE
-    except Exception:
-        conf_val = DEFAULT_CONFIDENCE
-    yolo.set_confidence(conf_val)
-
-    detections = []
-    if yolo.is_loaded():
-        try:
-            detections = yolo.predict(pil_img)
-        except Exception as e:
-            logger.exception("YOLO inference failed: %s", e)
-            raise HTTPException(status_code=500, detail="YOLO inference failed.")
-
+    detections = []  # YOLO is disabled
     text = ""
     try:
         text = ocr.extract_text(pil_img)
@@ -107,5 +95,4 @@ async def predict(image: UploadFile = File(...), conf: float = DEFAULT_CONFIDENC
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run("app.main:app", host=HOST, port=PORT, reload=DEBUG)

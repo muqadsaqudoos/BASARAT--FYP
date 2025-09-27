@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import '../services/voice_guide.dart';
 import '../state/app_settings.dart';
+import 'text_result_screen.dart'; // ✅ make sure this exists
 
 class TextReaderScreen extends StatefulWidget {
   const TextReaderScreen({super.key});
@@ -16,7 +18,6 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
   CameraController? _cameraController;
   Future<void>? _initializeCameraFuture;
   bool _cameraError = false;
-  bool _announced = false;
 
   @override
   void initState() {
@@ -28,16 +29,17 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
     try {
       final cameras = await availableCameras();
       final CameraDescription camera = cameras.firstWhere(
-        (c) => c.lensDirection == CameraLensDirection.back,
+            (c) => c.lensDirection == CameraLensDirection.back,
         orElse: () => cameras.first,
       );
 
       final controller = CameraController(
         camera,
-        ResolutionPreset.medium,
+        ResolutionPreset.high, // ✅ good quality like WhatsApp scanner
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.jpeg,
       );
+
       _initializeCameraFuture = controller.initialize();
       await _initializeCameraFuture;
       if (!mounted) return;
@@ -64,124 +66,68 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Main content
+          // 👇 Fullscreen camera preview
+          Positioned.fill(
+            child: _isLoading || _cameraError || _cameraController == null
+                ? const Center(child: CircularProgressIndicator())
+                : FutureBuilder<void>(
+              future: _initializeCameraFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(
+                      child: CircularProgressIndicator());
+                }
+                return CameraPreview(_cameraController!);
+              },
+            ),
+          ),
+
+          // 👇 Overlay UI
           Column(
             children: [
               // Header
               Container(
-                color: Colors.black,
-                padding: const EdgeInsets.fromLTRB(24, 44, 24, 16), // Account for status bar
+                color: Colors.black.withOpacity(0.5),
+                padding: const EdgeInsets.fromLTRB(24, 44, 24, 16),
                 child: Row(
                   children: [
-                    // Back button
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: const BoxDecoration(
-                        color: Colors.transparent,
-                        shape: BoxShape.circle,
-                      ),
-                      child: IconButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                        },
-                        icon: const Icon(
-                          Icons.arrow_back,
-                          color: Colors.white,
-                          size: 20,
-                        ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    ),
+                    const Spacer(),
+                    const Text(
+                      "Text Reading",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    
-                    // Title
-                    Expanded(
-                      child: Text(
-          "Text Reading",
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                          height: 1.0,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    
-                    // Spacer for symmetry
-                    const SizedBox(width: 40),
+                    const Spacer(),
                   ],
                 ),
               ),
 
-              // Main content area
-              Expanded(
-                child: Container(
-                  color: const Color.fromARGB(255, 10, 44, 78), // Dark blue background
-                  child: Stack(
-                    children: [
-                      // Vertical gray bars on sides
-                      Positioned(
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        child: Container(
-                          width: 16,
-                          color:const Color.fromARGB(255, 10, 44, 78),
-                        ),
-                      ),
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        bottom: 0,
-                        child: Container(
-                          width: 16,
-                          color: const Color.fromARGB(255, 10, 44, 78),
-                        ),
-                      ),
-                      
-                      // Camera view frame - centered
-                      Center(
-                        child: Container(
-                          width: MediaQuery.of(context).size.width * 0.8,
-                          height: MediaQuery.of(context).size.height * 0.35,
-                          decoration: BoxDecoration(
-                            color: const Color.fromARGB(255, 10, 44, 78),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: const Color.fromARGB(255, 141, 142, 143),
-                              width: 3,
-                            ),
-                          ),
-                          child: _buildCameraArea(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              const Spacer(),
 
-              // Action buttons section
+              // Capture + Speaker buttons
               Container(
-                color: Colors.black,
+                color: Colors.black.withOpacity(0.5),
                 height: 120,
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    // Capture Button (centered)
+                    // Capture Button
                     GestureDetector(
-                      onTap: () {
-                        _captureImage();
-                      },
+                      onTap: _captureAndRecognize,
                       child: Container(
                         width: 80,
                         height: 80,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white,
-                            width: 3,
-                          ),
+                          border: Border.all(color: Colors.white, width: 3),
                         ),
                         child: Container(
                           margin: const EdgeInsets.all(8),
@@ -193,7 +139,7 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
                       ),
                     ),
 
-                    // Speaker Button (moved a bit further to the right)
+                    // Speaker
                     Align(
                       alignment: Alignment.centerRight,
                       child: Padding(
@@ -202,7 +148,7 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
                           width: 56,
                           height: 56,
                           decoration: const BoxDecoration(
-                            color: Color(0xFF0B63CE), // Primary blue
+                            color: Color(0xFF0B63CE),
                             shape: BoxShape.circle,
                           ),
                           child: IconButton(
@@ -211,13 +157,11 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
                               final vg = VoiceGuideService();
                               await vg.setLanguage(appSettings.languageCode);
                               await vg.setRate(appSettings.speechRate);
-                              await vg.speak('Text Reading screen. Camera preview. Tap capture to read text.');
+                              await vg.speak(
+                                  'Text Reading screen. Tap capture to read text.');
                             },
-                            icon: const Icon(
-                              Icons.volume_up,
-                              color: Colors.white,
-                              size: 24,
-                            ),
+                            icon: const Icon(Icons.volume_up,
+                                color: Colors.white, size: 24),
                           ),
                         ),
                       ),
@@ -225,245 +169,47 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
                   ],
                 ),
               ),
-              
-              // Space for bottom navigation
+
               const SizedBox(height: 80),
             ],
-          ),
-
-          // Bottom Navigation Bar - Fixed at bottom exactly like the image
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              margin: EdgeInsets.zero,
-              height: 70, // Fixed height matching image
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(25),
-                  topRight: Radius.circular(25),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  // Home Icon
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: const BoxDecoration(
-                      color: Colors.transparent,
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
-                      icon: const Icon(
-                        Icons.home_outlined,
-                        color: Color(0xFF0B63CE),
-                        size: 24,
-                      ),
-                    ),
-                  ),
-                  
-                  // Microphone Icon (Active) - Larger
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF0B63CE),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      onPressed: () {
-                        _handleMicrophone();
-                      },
-                      icon: const Icon(
-                        Icons.mic,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
-                  ),
-                  
-                  // Help Icon
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: const BoxDecoration(
-                      color: Colors.transparent,
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      onPressed: () {
-                        _showHelp();
-                      },
-                      icon: const Icon(
-                        Icons.help_outline,
-                        color: Color(0xFF0B63CE),
-                        size: 24,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         ],
       ),
     );
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_announced) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (mounted && !_announced) {
-        final vg = VoiceGuideService();
-        await vg.speakIfEnabled(context, 'Text Reading screen. Camera preview. Tap capture to read text.');
-        _announced = true;
-      }
-    });
-  }
-
-  Widget _buildLoadingState() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Icon(
-          Icons.camera_alt,
-          color: Colors.grey,
-          size: 60,
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          "Camera loading...",
-          style: TextStyle(
-            color: Colors.grey,
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCameraViewHint() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: const [
-        Icon(Icons.camera_alt, color: Colors.grey, size: 60),
-        SizedBox(height: 16),
-        Text(
-          "Point your camera at text and tap capture",
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey, fontSize: 14),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCameraArea() {
-    if (_isLoading) {
-      return _buildLoadingState();
-    }
-    if (_cameraError || _cameraController == null) {
-      return _buildCameraViewHint();
-    }
-    return FutureBuilder<void>(
-      future: _initializeCameraFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return _buildLoadingState();
-        }
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: FittedBox(
-            fit: BoxFit.cover,
-            child: SizedBox(
-              width: _cameraController!.value.previewSize?.height ?? 300,
-              height: _cameraController!.value.previewSize?.width ?? 300,
-              child: CameraPreview(_cameraController!),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _captureImage() {
+  /// Capture + OCR
+  Future<void> _captureAndRecognize() async {
     if (_cameraController == null) return;
-    () async {
-      try {
-        await _initializeCameraFuture;
-        final file = await _cameraController!.takePicture();
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Image captured: ${file.name}')),
-        );
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Capture failed: $e')),
-        );
-      }
-    }();
-  }
+    try {
+      await _initializeCameraFuture;
+      final file = await _cameraController!.takePicture();
 
-  void _toggleSpeaker() {
-    // TODO: Implement speaker toggle functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Speaker toggled"),
-        backgroundColor: Color(0xFF0B63CE),
-      ),
-    );
-  }
+      // ✅ OCR with ML Kit
+      final inputImage = InputImage.fromFilePath(file.path);
+      final textRecognizer =
+      TextRecognizer(script: TextRecognitionScript.latin); // auto works for English/Urdu (Arabic script too!)
+      final RecognizedText recognizedText =
+      await textRecognizer.processImage(inputImage);
 
-  void _handleMicrophone() {
-    // TODO: Implement microphone functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Microphone activated"),
-        backgroundColor: Color(0xFF0B63CE),
-      ),
-    );
-  }
+      await textRecognizer.close();
 
-  void _showHelp() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text("Text Reading Help"),
-          content: const Text(
-            "1. Point your camera at the text you want to read\n"
-            "2. Tap the capture button to take a photo\n"
-            "3. The app will process and read the text aloud\n"
-            "4. Use the speaker button to toggle audio output",
+      if (!mounted) return;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TextResultScreen(
+            text: recognizedText.text, // ✅ only pass recognized text
           ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text("Got it"),
-            ),
-          ],
-        );
-      },
-    );
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('OCR failed: $e')),
+      );
+    }
   }
 
   @override

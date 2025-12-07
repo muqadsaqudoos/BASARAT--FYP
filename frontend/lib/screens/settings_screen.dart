@@ -12,6 +12,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _announced = false;
+  bool _isAnnouncing = false;
 
   @override
   Widget build(BuildContext context) {
@@ -99,8 +100,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _tile(
                   label: 'Dark Mode',
                   trailing: Switch(
-                    value: false,
-                    onChanged: (_) {},
+                    value: settings.darkModeEnabled,
+                    activeColor: Colors.blue,
+                    onChanged: settings.setDarkMode,
                   ),
                 ),
                 _tile(
@@ -130,14 +132,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_announced) return;
+  void initState() {
+    super.initState();
+    // Announce only once when screen is first created
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (mounted && !_announced) {
+      if (mounted && !_announced && !_isAnnouncing) {
+        _isAnnouncing = true;
+        // Wait a bit to ensure screen is fully loaded and no conflicts
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!mounted) return;
+        
         final vg = VoiceGuideService();
-        await vg.speakIfEnabled(context, 'Settings screen. Adjust language, voice guide, and preferences.');
-        _announced = true;
+        // Ensure the full message is spoken completely
+        final fullMessage = 'Settings screen. Adjust language, voice guide, and preferences.';
+        print('Settings screen: About to speak: "$fullMessage"');
+        await vg.speakIfEnabled(context, fullMessage);
+        print('Settings screen: Finished speaking');
+        if (mounted) {
+          setState(() {
+            _announced = true;
+            _isAnnouncing = false;
+          });
+        }
       }
     });
   }

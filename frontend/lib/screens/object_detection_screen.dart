@@ -17,11 +17,26 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
   Future<void>? _initializeCameraFuture;
   bool _cameraError = false;
   bool _announced = false;
+  bool _isAnnouncing = false;
 
   @override
   void initState() {
     super.initState();
     _initializeCamera();
+    // Announce only once when screen is first created
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (mounted && !_announced && !_isAnnouncing) {
+        _isAnnouncing = true;
+        final vg = VoiceGuideService();
+        await vg.speakIfEnabled(context, 'Object Detection screen. Camera preview. Tap capture to detect objects.');
+        if (mounted) {
+          setState(() {
+            _announced = true;
+            _isAnnouncing = false;
+          });
+        }
+      }
+    });
   }
 
   Future<void> _initializeCamera() async {
@@ -33,7 +48,7 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
       );
       final controller = CameraController(
         camera,
-        ResolutionPreset.medium,
+        ResolutionPreset.high,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.jpeg,
       );
@@ -63,90 +78,59 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
+          // 👇 Fullscreen camera preview
+          Positioned.fill(
+            child: _isLoading || _cameraError || _cameraController == null
+                ? const Center(child: CircularProgressIndicator())
+                : FutureBuilder<void>(
+              future: _initializeCameraFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                return CameraPreview(_cameraController!);
+              },
+            ),
+          ),
+
+          // 👇 Overlay UI
           Column(
             children: [
               // Header
               Container(
-                color: Colors.black,
+                color: Colors.black.withOpacity(0.5),
                 padding: const EdgeInsets.fromLTRB(24, 44, 24, 16),
                 child: Row(
                   children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: const BoxDecoration(
-                        color: Colors.transparent,
-                        shape: BoxShape.circle,
-                      ),
-                      child: IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    ),
+                    const Spacer(),
+                    const Text(
+                      "Object Detection",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    Expanded(
-                      child: Text(
-                        "Object Detection",
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                          height: 1.0,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    const SizedBox(width: 40),
+                    const Spacer(),
                   ],
                 ),
               ),
 
-              // Main content area
-              Expanded(
-                child: Container(
-                  color: const Color.fromARGB(255, 10, 44, 78),
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        child: Container(width: 16, color: const Color.fromARGB(255, 10, 44, 78)),
-                      ),
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        bottom: 0,
-                        child: Container(width: 16, color: const Color.fromARGB(255, 10, 44, 78)),
-                      ),
-                      Center(
-                        child: Container(
-                          width: MediaQuery.of(context).size.width * 0.8,
-                          height: MediaQuery.of(context).size.height * 0.35,
-                          decoration: BoxDecoration(
-                            color: const Color.fromARGB(255, 10, 44, 78),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: const Color.fromARGB(255, 141, 142, 143),
-                              width: 3,
-                            ),
-                          ),
-                          child: _buildCameraArea(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              const Spacer(),
 
-              // Action area
+              // Capture + Speaker buttons
               Container(
-                color: Colors.black,
+                color: Colors.black.withOpacity(0.5),
                 height: 120,
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    // Capture button
+                    // Capture Button
                     GestureDetector(
                       onTap: _captureImage,
                       child: Container(
@@ -158,12 +142,15 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
                         ),
                         child: Container(
                           margin: const EdgeInsets.all(8),
-                          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
                         ),
                       ),
                     ),
 
-                    // Speaker to the right
+                    // Speaker
                     Align(
                       alignment: Alignment.centerRight,
                       child: Padding(
@@ -171,7 +158,10 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
                         child: Container(
                           width: 56,
                           height: 56,
-                          decoration: const BoxDecoration(color: Color(0xFF0B63CE), shape: BoxShape.circle),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF0B63CE),
+                            shape: BoxShape.circle,
+                          ),
                           child: IconButton(
                             onPressed: () async {
                               if (!appSettings.voiceGuideEnabled) return;
@@ -192,159 +182,27 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
               const SizedBox(height: 80),
             ],
           ),
-
-          // Bottom nav (full width)
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              margin: EdgeInsets.zero,
-              height: 70,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(topLeft: Radius.circular(25), topRight: Radius.circular(25)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.home_outlined, color: Color(0xFF0B63CE), size: 24),
-                  ),
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: const BoxDecoration(color: Color(0xFF0B63CE), shape: BoxShape.circle),
-                    child: IconButton(
-                      onPressed: _handleMicrophone,
-                      icon: const Icon(Icons.mic, color: Colors.white, size: 24),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _showHelp,
-                    icon: const Icon(Icons.help_outline, color: Color(0xFF0B63CE), size: 24),
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_announced) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (mounted && !_announced) {
-        final vg = VoiceGuideService();
-        await vg.speakIfEnabled(context, 'Object Detection screen. Camera preview. Tap capture to detect objects.');
-        _announced = true;
-      }
-    });
-  }
 
-  Widget _buildLoadingState() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: const [
-        Icon(Icons.camera_alt, color: Colors.grey, size: 60),
-        SizedBox(height: 16),
-        Text("Camera loading...", style: TextStyle(color: Colors.grey, fontSize: 16, fontWeight: FontWeight.w500)),
-      ],
-    );
-  }
-
-  Widget _buildCameraHint() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: const [
-        Icon(Icons.center_focus_strong, color: Colors.grey, size: 60),
-        SizedBox(height: 16),
-        Text(
-          "Point your camera at the object and tap capture",
-          style: TextStyle(color: Colors.grey, fontSize: 14),
-          textAlign: TextAlign.center,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCameraArea() {
-    if (_isLoading) return _buildLoadingState();
-    if (_cameraError || _cameraController == null) return _buildCameraHint();
-    return FutureBuilder<void>(
-      future: _initializeCameraFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return _buildLoadingState();
-        }
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: FittedBox(
-            fit: BoxFit.cover,
-            child: SizedBox(
-              width: _cameraController!.value.previewSize?.height ?? 300,
-              height: _cameraController!.value.previewSize?.width ?? 300,
-              child: CameraPreview(_cameraController!),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _captureImage() {
+  Future<void> _captureImage() async {
     if (_cameraController == null) return;
-    () async {
-      try {
-        await _initializeCameraFuture;
-        final file = await _cameraController!.takePicture();
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Image captured: ${file.name}')),
-        );
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Capture failed: $e')),
-        );
-      }
-    }();
-  }
-
-  void _toggleSpeaker() {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text("Speaker toggled"),
-      backgroundColor: Color(0xFF0B63CE),
-    ));
-  }
-
-  void _handleMicrophone() {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text("Microphone activated"),
-      backgroundColor: Color(0xFF0B63CE),
-    ));
-  }
-
-  void _showHelp() {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Object Detection Help"),
-        content: const Text(
-          "1. Point your camera at the object you want to detect\n"
-          "2. Tap the capture button\n"
-          "3. The app will detect and announce the object",
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Got it")),
-        ],
-      ),
-    );
+    try {
+      await _initializeCameraFuture;
+      final file = await _cameraController!.takePicture();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Image captured: ${file.name}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Capture failed: $e')),
+      );
+    }
   }
 
   @override

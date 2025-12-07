@@ -5,6 +5,7 @@ class AppSettings extends ChangeNotifier {
   String languageCode = 'en-US';
   double speechRate = 0.5; // 0.3 slow, 0.5 normal, 0.8 fast
   bool vibrationEnabled = true;
+  bool darkModeEnabled = false;
 
   void toggleVoiceGuide(bool value) {
     voiceGuideEnabled = value;
@@ -28,6 +29,16 @@ class AppSettings extends ChangeNotifier {
 
   void setVibration(bool value) {
     vibrationEnabled = value;
+    notifyListeners();
+  }
+
+  void setDarkMode(bool value) {
+    darkModeEnabled = value;
+    notifyListeners();
+  }
+
+  void toggleDarkMode() {
+    darkModeEnabled = !darkModeEnabled;
     notifyListeners();
   }
 }

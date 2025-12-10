@@ -17,33 +17,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<AppSettings>();
+    final theme = Theme.of(context);
+    final surface = theme.colorScheme.surface;
+    final onSurface = theme.colorScheme.onSurface;
+    final card = theme.cardColor;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: theme.scaffoldBackgroundColor,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.blue),
+          icon: Icon(Icons.arrow_back, color: Colors.blue),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('بصارت', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w700)),
+        title: const Text(
+          'بصارت',
+          style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w700),
+        ),
         centerTitle: true,
       ),
+
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           _section(
+            context: context,
             title: 'Language Selection',
             icon: Icons.language,
             child: Row(
               children: [
                 _chip(
+                  context: context,
                   selected: settings.languageCode == 'en-US',
                   label: 'English',
                   onTap: () => settings.setLanguage('en-US'),
                 ),
                 const SizedBox(width: 8),
                 _chip(
+                  context: context,
                   selected: settings.languageCode == 'ur-PK',
                   label: 'اردو',
                   onTap: () => settings.setLanguage('ur-PK'),
@@ -51,13 +63,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
+
           _section(
+            context: context,
             title: 'Voice Guide Settings',
             icon: Icons.volume_up,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _tile(
+                  context: context,
                   label: 'Voice Guide',
                   trailing: Switch(
                     value: settings.voiceGuideEnabled,
@@ -65,24 +80,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onChanged: settings.toggleVoiceGuide,
                   ),
                 ),
+
                 const SizedBox(height: 8),
-                const Text('Speech Speed', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
+                Text('Speech Speed',
+                    style: TextStyle(fontWeight: FontWeight.w600, color: onSurface)),
                 const SizedBox(height: 8),
                 Row(
                   children: [
                     _chip(
+                      context: context,
                       selected: settings.speechRate == 0.3,
                       label: 'Slow',
                       onTap: () => settings.setSpeechRate(0.3),
                     ),
                     const SizedBox(width: 8),
                     _chip(
+                      context: context,
                       selected: settings.speechRate == 0.5,
                       label: 'Normal',
                       onTap: () => settings.setSpeechRate(0.5),
                     ),
                     const SizedBox(width: 8),
                     _chip(
+                      context: context,
                       selected: settings.speechRate == 0.8,
                       label: 'Fast',
                       onTap: () => settings.setSpeechRate(0.8),
@@ -92,12 +112,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
+
           _section(
+            context: context,
             title: 'Theme Mode',
             icon: Icons.color_lens_outlined,
             child: Column(
               children: [
                 _tile(
+                  context: context,
                   label: 'Dark Mode',
                   trailing: Switch(
                     value: settings.darkModeEnabled,
@@ -106,6 +129,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 _tile(
+                  context: context,
                   label: 'Vibration',
                   trailing: Switch(
                     value: settings.vibrationEnabled,
@@ -116,7 +140,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
+
           _section(
+            context: context,
             title: 'About',
             icon: Icons.info_outline,
             child: Column(
@@ -134,20 +160,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    // Announce only once when screen is first created
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted && !_announced && !_isAnnouncing) {
         _isAnnouncing = true;
-        // Wait a bit to ensure screen is fully loaded and no conflicts
         await Future.delayed(const Duration(milliseconds: 500));
         if (!mounted) return;
-        
+
         final vg = VoiceGuideService();
-        // Ensure the full message is spoken completely
-        final fullMessage = 'Settings screen. Adjust language, voice guide, and preferences.';
-        print('Settings screen: About to speak: "$fullMessage"');
+        final fullMessage =
+            'Settings screen. Adjust language, voice guide, and preferences.';
         await vg.speakIfEnabled(context, fullMessage);
-        print('Settings screen: Finished speaking');
+
         if (mounted) {
           setState(() {
             _announced = true;
@@ -157,68 +181,109 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     });
   }
+}
 
-  Widget _section({required String title, required IconData icon, required Widget child}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: Colors.blue),
-              const SizedBox(width: 8),
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          child,
-        ],
-      ),
-    );
-  }
-
-  Widget _chip({required bool selected, required String label, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFFE8F1FF) : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: selected ? Colors.blue : Colors.grey.shade300),
+Widget _section({
+  required BuildContext context,
+  required String title,
+  required IconData icon,
+  required Widget child,
+}) {
+  final theme = Theme.of(context);
+  return Container(
+    margin: const EdgeInsets.only(bottom: 16),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: theme.cardColor,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(theme.brightness == Brightness.light ? 0.06 : 0.2),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
         ),
-        child: Text(label, style: TextStyle(color: selected ? Colors.blue : Colors.black87, fontWeight: FontWeight.w600)),
+      ],
+      border: Border.all(
+        color: theme.dividerColor.withOpacity(0.3),
       ),
-    );
-  }
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, color: Colors.blue),
+            const SizedBox(width: 8),
+            Text(title,
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurface)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        child,
+      ],
+    ),
+  );
+}
 
-  Widget _tile({required String label, required Widget trailing}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+Widget _chip({
+  required BuildContext context,
+  required bool selected,
+  required String label,
+  required VoidCallback onTap,
+}) {
+  final theme = Theme.of(context);
+  return GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF6F7FB),
+        color: selected
+            ? const Color(0xFFE8F1FF)
+            : theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(
+          color: selected ? Colors.blue : theme.dividerColor,
+        ),
       ),
-      child: Row(
-        children: [
-          Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600))),
-          trailing,
-        ],
+      child: Text(
+        label,
+        style: TextStyle(
+          color: selected ? Colors.blue : theme.colorScheme.onSurface,
+          fontWeight: FontWeight.w600,
+        ),
       ),
-    );
-  }
+    ),
+  );
+}
+
+Widget _tile({
+  required BuildContext context,
+  required String label,
+  required Widget trailing,
+}) {
+  final theme = Theme.of(context);
+  return Container(
+    margin: const EdgeInsets.only(bottom: 10),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    decoration: BoxDecoration(
+      color: theme.colorScheme.surfaceVariant ?? theme.cardColor,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: theme.dividerColor.withOpacity(0.4)),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+            child: Text(label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
+                ))),
+        trailing,
+      ],
+    ),
+  );
 }
 
 class _InfoRow extends StatelessWidget {
@@ -228,18 +293,26 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF6F7FB),
+        color: theme.colorScheme.surfaceVariant ?? theme.cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.4)),
       ),
       child: Row(
         children: [
-          Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600))),
-          Text(value, style: const TextStyle(color: Colors.grey)),
+          Expanded(
+            child: Text(label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
+                )),
+          ),
+          Text(value, style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6))),
         ],
       ),
     );

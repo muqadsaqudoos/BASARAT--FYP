@@ -1,4 +1,4 @@
-# backend/config.py
+# backend/app/config.py
 import os
 from pathlib import Path
 
@@ -29,4 +29,3 @@ CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*")  # set to comma-separated lis
 
 # Logging
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
-

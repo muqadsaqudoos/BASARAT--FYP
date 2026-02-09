@@ -1,7 +1,6 @@
-// home_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'text_reader_screen.dart'; 
+import 'text_reader_screen.dart';
 import 'object_detection_screen.dart';
 import 'settings_screen.dart';
 import 'package:provider/provider.dart';
@@ -19,22 +18,24 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final VoiceCommandService _voiceCommandService = VoiceCommandService();
   bool _isListening = false;
-  bool _announced = false;
-  bool _isAnnouncing = false;
   late AnimationController _rippleController;
   late Animation<double> _rippleAnimation;
   String? _recognizedCommand;
   String? _statusMessage;
   Timer? _commandDisplayTimer;
   Timer? _inactivityTimer;
+  bool _announced = false;
+  bool _isAnnouncing = false;
 
   @override
   void initState() {
     super.initState();
+
     _rippleController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     );
+
     _rippleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _rippleController, curve: Curves.easeOut),
     );
@@ -70,12 +71,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _clearRecognizedCommand() {
-    if (mounted) {
-      setState(() {
-        _recognizedCommand = null;
-        _statusMessage = null;
-      });
-    }
+    if (!mounted) return;
+    setState(() {
+      _recognizedCommand = null;
+      _statusMessage = null;
+    });
   }
 
   void _startInactivityTimer() {
@@ -133,9 +133,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             content: const Text(
               'Microphone access was denied. To enable voice commands:\n\n'
               '1. Click the lock/info icon in your browser address bar\n'
-              '2. Find "Microphone" and change it to "Allow"\n'
-              '3. Refresh this page and try again\n\n'
-              'Or go to browser settings and allow microphone for localhost.',
+              '2. Find “Microphone” and change it to “Allow”\n'
+              '3. Refresh this page and try again'
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
@@ -197,9 +196,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       },
       onError: (error) {
         if (!mounted) return;
+
         _rippleController.stop();
         _inactivityTimer?.cancel();
         setState(() => _isListening = false);
+
         if (error.contains('permission') || error.contains('Microphone')) {
           showDialog(
             context: context,
@@ -281,7 +282,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       body: Stack(
         children: [
           Padding(
-            padding: const EdgeInsets.all(20.0),
+            padding: const EdgeInsets.all(20),
             child: Column(
               children: [
                 Expanded(
@@ -311,18 +312,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           icon: Icons.visibility,
                           title: "Object Detection",
                           description: "Identify objects using your camera",
-                          onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const ObjectDetectionScreen())),
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ObjectDetectionScreen())),
                         ),
                         const SizedBox(height: 16),
                         _buildFeatureCard(
                           icon: Icons.document_scanner,
                           title: "Text Reading",
                           description: "Scan and read text from images",
-                          onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const TextReaderScreen())),
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TextReaderScreen())),
                         ),
                       ],
                     ),
@@ -357,7 +354,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   color: _statusMessage != null ? Colors.orange.shade50 : Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                      color: _statusMessage != null ? Colors.orange.shade200 : Colors.blue.shade200, width: 1),
+                      color: _statusMessage != null ? Colors.orange.shade200 : Colors.blue.shade200,
+                      width: 1),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.1),
@@ -398,9 +396,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           onPressed: () async {
             if (!appSettings.voiceGuideEnabled) appSettings.toggleVoiceGuide(true);
             final vg = VoiceGuideService();
-            await vg.setLanguage(appSettings.languageCode);
-            await vg.setRate(appSettings.speechRate);
-            await vg.speak('Home screen. Choose a feature: Object Detection or Text Reading.');
+            await vg.speakIfEnabled(
+              context,
+              'Home screen. Choose a feature: Object Detection or Text Reading.',
+            );
           },
           icon: const Icon(Icons.volume_up, color: Colors.white, size: 24),
         ),
@@ -528,25 +527,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       height: 80,
       child: Stack(
         alignment: Alignment.center,
-        clipBehavior: Clip.none,
         children: [
           if (_isListening)
-            Positioned(
-              child: AnimatedBuilder(
-                animation: _rippleAnimation,
-                builder: (context, child) {
-                  return Container(
-                    width: 56 + (_rippleAnimation.value * 15),
-                    height: 56 + (_rippleAnimation.value * 15),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.red.withOpacity(1.0 - _rippleAnimation.value),
-                        width: 2,
-                      ),
-                    ),
-                  );
-                },
+            AnimatedBuilder(
+              animation: _rippleAnimation,
+              builder: (_, __) => Container(
+                width: 56 + (_rippleAnimation.value * 15),
+                height: 56 + (_rippleAnimation.value * 15),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.red.withOpacity(1.0 - _rippleAnimation.value),
+                    width: 2,
+                  ),
+                ),
               ),
             ),
           Container(

@@ -9,10 +9,10 @@ import '../screens/settings_screen.dart';
 import 'voice_command_service_web.dart' as web_utils;
 
 /// Voice Command Service - Complete Implementation
-/// 
+///
 /// This service handles speech-to-text recognition and command processing.
 /// It uses the speech_to_text package which works on web and mobile platforms.
-/// 
+///
 /// Features:
 /// - Real-time speech recognition with partial results
 /// - Automatic restart when recognition stops
@@ -23,24 +23,24 @@ import 'voice_command_service_web.dart' as web_utils;
 class VoiceCommandService {
   // Core speech recognition instance
   final stt.SpeechToText _speech = stt.SpeechToText();
-  
+
   // State management
   bool _isListening = false;
   bool _isInitialized = false;
   bool _isRestarting = false;
-  
+
   // Callbacks for UI updates
   Function(String)? _onResultCallback;
   Function(String)? _onErrorCallback;
   Function(String)? _onPartialResultCallback;
   Function(String)? _onStatusCallback;
   BuildContext? _context;
-  
+
   // Debouncing: Track last command to prevent repeated triggers
   String? _lastCommand;
   DateTime? _lastCommandTime;
   static const Duration _debounceDuration = Duration(seconds: 1);
-  
+
   // Restart management: Prevent rapid restarts
   DateTime? _lastRestartTime;
   static const Duration _restartCooldown = Duration(milliseconds: 500);
@@ -192,7 +192,7 @@ class VoiceCommandService {
     if (_isInitialized) {
       return true;
     }
-    
+
     try {
       print('[VoiceCommand] Initializing speech recognition...');
       final available = await _speech.initialize(
@@ -206,7 +206,7 @@ class VoiceCommandService {
           _handleStatusChange(status);
         },
       );
-      
+
       _isInitialized = available;
       print('[VoiceCommand] Initialized: $available');
       return available;
@@ -219,7 +219,7 @@ class VoiceCommandService {
   /// Handle status changes from speech recognition
   void _handleStatusChange(String status) {
     print('[VoiceCommand] Status: $status');
-    
+
     if (status == 'listening') {
       if (_onStatusCallback != null) {
         _onStatusCallback!('Listening...');
@@ -241,8 +241,8 @@ class VoiceCommandService {
     }
 
     // Check if we have all required callbacks and context
-    if (_onResultCallback == null || 
-        _onErrorCallback == null || 
+    if (_onResultCallback == null ||
+        _onErrorCallback == null ||
         _context == null) {
       print('[VoiceCommand] Cannot restart - missing callbacks or context');
       return;
@@ -263,11 +263,11 @@ class VoiceCommandService {
 
     print('[VoiceCommand] Restarting recognition...');
     _lastRestartTime = now;
-    
+
     if (_onStatusCallback != null) {
       _onStatusCallback!('Restarting...');
     }
-    
+
     // Restart after a brief delay
     Future.delayed(const Duration(milliseconds: 300), () {
       if (_isListening && !_isRestarting) {
@@ -276,12 +276,16 @@ class VoiceCommandService {
     });
   }
 
-  /// Request microphone permission using browser's native API
+  /*/// Request microphone permission using browser's native API
   Future<bool> requestMicrophonePermission() async {
     if (kIsWeb) {
       return await web_utils.requestMicrophonePermissionWeb();
     }
     // For non-web platforms, permission is handled by the platform
+    return true;
+  }*/
+  Future<bool> requestMicrophonePermission() async {
+    // Web permission check disabled for now to allow Android APK build
     return true;
   }
 
@@ -299,7 +303,7 @@ class VoiceCommandService {
   }
 
   /// Start listening for voice commands
-  /// 
+  ///
   /// Parameters:
   /// - onResult: Called when a recognized command is processed
   /// - onError: Called when an error occurs
@@ -317,7 +321,9 @@ class VoiceCommandService {
     if (!_isInitialized) {
       final initialized = await initialize();
       if (!initialized) {
-        onError('Speech recognition not available. Please check microphone permissions.');
+        onError(
+          'Speech recognition not available. Please check microphone permissions.',
+        );
         return;
       }
     }
@@ -329,20 +335,20 @@ class VoiceCommandService {
 
     try {
       _isListening = true;
-      
+
       // Store callbacks and context for auto-restart
       _onResultCallback = onResult;
       _onErrorCallback = onError;
       _onPartialResultCallback = onPartialResult;
       _onStatusCallback = onStatus;
       _context = context;
-      
+
       print('[VoiceCommand] Starting speech recognition...');
-      
+
       if (_onStatusCallback != null) {
         _onStatusCallback!('Starting...');
       }
-      
+
       // Start listening with optimal settings
       await _speech.listen(
         onResult: (result) {
@@ -354,22 +360,25 @@ class VoiceCommandService {
           listenMode: stt.ListenMode.confirmation, // Better accuracy
         ),
         listenFor: const Duration(seconds: 30), // Max listening duration
-        pauseFor: const Duration(seconds: 5), // Wait 5s of silence before stopping
+        pauseFor: const Duration(
+          seconds: 5,
+        ), // Wait 5s of silence before stopping
         localeId: 'en_US', // English recognition
       );
-      
+
       print('[VoiceCommand] Speech recognition started');
-      
     } catch (e, stackTrace) {
       _isListening = false;
       print('[VoiceCommand] Error starting recognition: $e');
       print('[VoiceCommand] Stack trace: $stackTrace');
-      
+
       final errorMsg = e.toString().toLowerCase();
-      if (errorMsg.contains('permission') || 
-          errorMsg.contains('not allowed') || 
+      if (errorMsg.contains('permission') ||
+          errorMsg.contains('not allowed') ||
           errorMsg.contains('denied')) {
-        onError('Microphone permission denied. Please allow microphone access.');
+        onError(
+          'Microphone permission denied. Please allow microphone access.',
+        );
       } else {
         onError('Failed to start listening: $e');
       }
@@ -379,21 +388,23 @@ class VoiceCommandService {
   /// Handle speech recognition results
   void _handleSpeechResult(dynamic result) {
     final command = result.recognizedWords.toLowerCase().trim();
-    
-    print('[VoiceCommand] Recognized: "$command" (final: ${result.finalResult}, confidence: ${result.confidence})');
-    
+
+    print(
+      '[VoiceCommand] Recognized: "$command" (final: ${result.finalResult}, confidence: ${result.confidence})',
+    );
+
     if (command.isEmpty) {
       return;
     }
-    
+
     // Always show partial results in real-time
     if (_onPartialResultCallback != null) {
       _onPartialResultCallback!(command);
     }
-    
+
     // Process the command
     final action = processCommand(command);
-    
+
     if (action != null) {
       // Command matched - process if it's final or has good confidence
       if (result.finalResult || result.confidence > 0.5) {
@@ -415,22 +426,22 @@ class VoiceCommandService {
 
   /// Internal method to restart listening after a session ends
   Future<void> _restartListening() async {
-    if (!_isListening || 
-        !_isInitialized || 
-        _onResultCallback == null || 
+    if (!_isListening ||
+        !_isInitialized ||
+        _onResultCallback == null ||
         _isRestarting) {
       return;
     }
-    
+
     _isRestarting = true;
-    
+
     try {
       print('[VoiceCommand] Restarting recognition...');
-      
+
       if (_onStatusCallback != null) {
         _onStatusCallback!('Reconnecting...');
       }
-      
+
       await _speech.listen(
         onResult: (result) {
           _handleSpeechResult(result);
@@ -444,20 +455,19 @@ class VoiceCommandService {
         pauseFor: const Duration(seconds: 5),
         localeId: 'en_US',
       );
-      
+
       print('[VoiceCommand] Recognition restarted successfully');
-      
+
       if (_onStatusCallback != null) {
         _onStatusCallback!('Listening...');
       }
-      
     } catch (e) {
       print('[VoiceCommand] Error restarting: $e');
-      
+
       if (_onStatusCallback != null) {
         _onStatusCallback!('Error. Retrying...');
       }
-      
+
       // Retry after delay
       if (_isListening) {
         Future.delayed(const Duration(seconds: 2), () {
@@ -479,10 +489,10 @@ class VoiceCommandService {
   Future<void> stopListening() async {
     if (_isListening) {
       print('[VoiceCommand] Stopping speech recognition...');
-      
+
       await _speech.stop();
       _isListening = false;
-      
+
       // Clear callbacks
       _onResultCallback = null;
       _onErrorCallback = null;
@@ -490,7 +500,7 @@ class VoiceCommandService {
       _onStatusCallback = null;
       _context = null;
       _isRestarting = false;
-      
+
       print('[VoiceCommand] Speech recognition stopped');
     }
   }
@@ -502,28 +512,32 @@ class VoiceCommandService {
   /// Returns the action string if a command is recognized, null otherwise
   String? processCommand(String command) {
     final lowerCommand = command.toLowerCase().trim();
-    
+
     print('[VoiceCommand] Processing command: "$lowerCommand"');
-    
+
     // Special handling for text reading - check if both "read" and "text" are present
     final hasRead = lowerCommand.contains('read');
     final hasText = lowerCommand.contains('text');
     if (hasRead && hasText) {
-      print('[VoiceCommand] Matched: text_reading (found both "read" and "text")');
+      print(
+        '[VoiceCommand] Matched: text_reading (found both "read" and "text")',
+      );
       return 'text_reading';
     }
-    
+
     // Check for single words "read" or "text" alone - they should open text reading
     if (lowerCommand == 'read' || lowerCommand == 'text') {
-      print('[VoiceCommand] Matched: text_reading (single word: "$lowerCommand")');
+      print(
+        '[VoiceCommand] Matched: text_reading (single word: "$lowerCommand")',
+      );
       return 'text_reading';
     }
-    
+
     // Loop through all command keywords
     for (final entry in _commandKeywords.entries) {
       final action = entry.key;
       final keywords = entry.value;
-      
+
       // Check if any keyword matches the command
       for (final keyword in keywords) {
         if (lowerCommand.contains(keyword)) {
@@ -532,7 +546,7 @@ class VoiceCommandService {
         }
       }
     }
-    
+
     // Special handling for context-dependent commands
     if (lowerCommand.contains('language')) {
       for (final keyword in _commandKeywords['language_urdu']!) {
@@ -546,7 +560,7 @@ class VoiceCommandService {
         }
       }
     }
-    
+
     if (lowerCommand.contains('speed') || lowerCommand.contains('voice')) {
       for (final keyword in _commandKeywords['speed_fast']!) {
         if (lowerCommand.contains(keyword)) {
@@ -564,7 +578,7 @@ class VoiceCommandService {
         }
       }
     }
-    
+
     print('[VoiceCommand] No match found');
     return null;
   }
@@ -572,15 +586,15 @@ class VoiceCommandService {
   /// Check if command should be processed (debounce check)
   bool _shouldProcessCommand(String action) {
     final now = DateTime.now();
-    
+
     // Prevent processing the same command within debounce duration
-    if (_lastCommand == action && 
-        _lastCommandTime != null && 
+    if (_lastCommand == action &&
+        _lastCommandTime != null &&
         now.difference(_lastCommandTime!) < _debounceDuration) {
       print('[VoiceCommand] Command debounced: "$action"');
       return false;
     }
-    
+
     // Update last command and timestamp
     _lastCommand = action;
     _lastCommandTime = now;
@@ -592,10 +606,11 @@ class VoiceCommandService {
     required String command,
     required BuildContext context,
     required AppSettings appSettings,
-    VoidCallback? onStopListening, // Callback to stop listening (for voice_command_off)
+    VoidCallback?
+    onStopListening, // Callback to stop listening (for voice_command_off)
   }) async {
     final action = processCommand(command);
-    
+
     if (action == null) {
       // Command not recognized
       final vg = VoiceGuideService();
@@ -621,90 +636,88 @@ class VoiceCommandService {
           );
         }
         break;
-        
+
       case 'text_reading':
         if (context.mounted) {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => const TextReaderScreen(),
-            ),
+            MaterialPageRoute(builder: (context) => const TextReaderScreen()),
           );
         }
         break;
-        
+
       case 'home':
         final isOnHomeScreen = Navigator.canPop(context) == false;
         if (isOnHomeScreen) {
-          await vg.speak('Home screen. Choose a feature: Object Detection or Text Reading.');
+          await vg.speak(
+            'Home screen. Choose a feature: Object Detection or Text Reading.',
+          );
         } else {
           if (context.mounted) {
             Navigator.popUntil(context, (route) => route.isFirst);
           }
         }
         break;
-        
+
       case 'settings':
         if (context.mounted) {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => const SettingsScreen(),
-            ),
+            MaterialPageRoute(builder: (context) => const SettingsScreen()),
           );
         }
         break;
-        
+
       case 'language_urdu':
         appSettings.setLanguage('ur-PK');
         await vg.setLanguage('ur-PK');
         await vg.speak('Language changed to Urdu.');
         break;
-        
+
       case 'language_english':
         appSettings.setLanguage('en-US');
         await vg.setLanguage('en-US');
         await vg.speak('Language changed to English.');
         break;
-        
+
       case 'speed_fast':
         appSettings.setSpeechRate(0.8);
         await vg.setRate(0.8);
         await vg.speak('Voice speed changed to fast.');
         break;
-        
+
       case 'speed_slow':
         appSettings.setSpeechRate(0.3);
         await vg.setRate(0.3);
         await vg.speak('Voice speed changed to slow.');
         break;
-        
+
       case 'speed_normal':
         appSettings.setSpeechRate(0.5);
         await vg.setRate(0.5);
         await vg.speak('Voice speed changed to normal.');
         break;
-        
+
       case 'dark_mode_on':
         appSettings.setDarkMode(true);
         await vg.speak('Dark mode enabled.');
         break;
-        
+
       case 'dark_mode_off':
         appSettings.setDarkMode(false);
         await vg.speak('Dark mode disabled.');
         break;
-        
+
       case 'vibration_on':
         appSettings.setVibration(true);
         await vg.speak('Vibration enabled.');
         break;
-        
+
       case 'vibration_off':
         appSettings.setVibration(false);
         await vg.speak('Vibration disabled.');
         break;
-        
+
       case 'voice_command_off':
         // Stop listening for voice commands
         await stopListening();
@@ -714,12 +727,12 @@ class VoiceCommandService {
           onStopListening();
         }
         break;
-        
+
       case 'voice_guide_on':
         appSettings.toggleVoiceGuide(true);
         await vg.speak('Voice guide enabled.');
         break;
-        
+
       case 'voice_guide_off':
         // Announce before disabling (so user can hear it)
         await vg.speak('Voice guide disabled.');

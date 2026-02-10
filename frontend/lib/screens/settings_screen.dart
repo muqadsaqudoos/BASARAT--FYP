@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/app_settings.dart';
 import '../services/voice_guide.dart';
+import '../services/voice_command_service.dart';
+import 'widgets/app_footer.dart'; // ✅ footer
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -13,14 +15,49 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _announced = false;
   bool _isAnnouncing = false;
+  late final VoiceCommandService _voiceCommandService;
+
+  @override
+  void initState() {
+    super.initState();
+    _voiceCommandService = VoiceCommandService();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (mounted && !_announced && !_isAnnouncing) {
+        _isAnnouncing = true;
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!mounted) return;
+
+        final appSettings = context.read<AppSettings>();
+        final vg = VoiceGuideService();
+        await vg.setLanguage(appSettings.languageCode);
+        await vg.setRate(appSettings.speechRate);
+
+        final fullMessage = appSettings.languageCode == 'ur-PK'
+            ? 'سیٹنگز اسکرین۔ زبان، وائس گائیڈ، اور دیگر ترتیبات ایڈجسٹ کریں۔'
+            : 'Settings screen. Adjust language, voice guide, and preferences.';
+
+        await vg.speakIfEnabled(context, fullMessage);
+
+        if (mounted) {
+          setState(() {
+            _announced = true;
+            _isAnnouncing = false;
+          });
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _voiceCommandService.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<AppSettings>();
     final theme = Theme.of(context);
-    final surface = theme.colorScheme.surface;
-    final onSurface = theme.colorScheme.onSurface;
-    final card = theme.cardColor;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -37,7 +74,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         centerTitle: true,
       ),
-
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -51,19 +87,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   context: context,
                   selected: settings.languageCode == 'en-US',
                   label: 'English',
-                  onTap: () => settings.setLanguage('en-US'),
+                  onTap: () {
+                    settings.setLanguage('en-US');
+                    _speakLanguageChange('en-US');
+                  },
                 ),
                 const SizedBox(width: 8),
                 _chip(
                   context: context,
                   selected: settings.languageCode == 'ur-PK',
                   label: 'اردو',
-                  onTap: () => settings.setLanguage('ur-PK'),
+                  onTap: () {
+                    settings.setLanguage('ur-PK');
+                    _speakLanguageChange('ur-PK');
+                  },
                 ),
               ],
             ),
           ),
-
           _section(
             context: context,
             title: 'Voice Guide Settings',
@@ -77,13 +118,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: Switch(
                     value: settings.voiceGuideEnabled,
                     activeColor: Colors.blue,
-                    onChanged: settings.toggleVoiceGuide,
+                    onChanged: (value) async {
+                      settings.toggleVoiceGuide(value);
+                      await _speakVoiceGuideToggle(
+                        value,
+                        settings.languageCode,
+                      );
+                    },
                   ),
                 ),
-
                 const SizedBox(height: 8),
-                Text('Speech Speed',
-                    style: TextStyle(fontWeight: FontWeight.w600, color: onSurface)),
+                Text(
+                  'Speech Speed',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -112,7 +163,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
-
           _section(
             context: context,
             title: 'Theme Mode',
@@ -140,7 +190,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
-
           _section(
             context: context,
             title: 'About',
@@ -152,37 +201,117 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 100),
         ],
+      ),
+      bottomNavigationBar: AppFooter(
+        onHome: () => Navigator.pop(context),
+        onHelp: () => _showHelpDialog(context),
+        micButton: GestureDetector(
+          onTap: _handleMicPress,
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: const BoxDecoration(
+              color: Color(0xFF0B63CE),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.mic, color: Colors.white),
+          ),
+        ),
       ),
     );
   }
 
-  @override
-  void initState() {
-    super.initState();
+  // -------------------- Helpers --------------------
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (mounted && !_announced && !_isAnnouncing) {
-        _isAnnouncing = true;
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (!mounted) return;
+  Future<void> _speakLanguageChange(String code) async {
+    final settings = context.read<AppSettings>();
+    if (!settings.voiceGuideEnabled) return;
 
-        final vg = VoiceGuideService();
-        final fullMessage =
-            'Settings screen. Adjust language, voice guide, and preferences.';
-        await vg.speakIfEnabled(context, fullMessage);
+    final vg = VoiceGuideService();
+    await vg.setLanguage(code);
+    await vg.setRate(settings.speechRate);
+    await vg.speak(
+      code == 'ur-PK'
+          ? 'زبان اردو میں تبدیل کر دی گئی۔'
+          : 'Language switched to English.',
+    );
+  }
 
-        if (mounted) {
-          setState(() {
-            _announced = true;
-            _isAnnouncing = false;
-          });
-        }
-      }
-    });
+  Future<void> _speakVoiceGuideToggle(bool enabled, String code) async {
+    if (!enabled) return;
+    final vg = VoiceGuideService();
+    await vg.setLanguage(code);
+    await vg.speak(
+      code == 'ur-PK' ? 'وائس گائیڈ فعال ہے۔' : 'Voice guide enabled.',
+    );
+  }
+
+  void _handleMicPress() async {
+    final appSettings = context.read<AppSettings>();
+    if (!appSettings.voiceGuideEnabled) return;
+
+    final hasPermission = await _voiceCommandService
+        .requestMicrophonePermission();
+    if (!hasPermission) return;
+
+    if (_voiceCommandService.isListening) {
+      await _voiceCommandService.stopListening();
+      return;
+    }
+
+    await _voiceCommandService.startListening(
+      context: context,
+      onResult: (command) async {
+        await _voiceCommandService.handleVoiceCommand(
+          command: command,
+          context: context,
+          appSettings: appSettings,
+        );
+      },
+      onError: (error) => print('Voice command error: $error'),
+      onStatus: (status) => print('Voice command status: $status'),
+      onPartialResult: (partial) => print('Partial result: $partial'),
+    );
+  }
+
+  void _showHelpDialog(BuildContext context) async {
+    final appSettings = context.read<AppSettings>();
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Help'),
+        content: const Text(
+          'Settings Screen:\n\n'
+          '• Change language\n'
+          '• Enable/disable voice guide\n'
+          '• Adjust speech speed\n'
+          '• Toggle dark mode and vibration',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+
+    if (appSettings.voiceGuideEnabled) {
+      final vg = VoiceGuideService();
+      await vg.setLanguage(appSettings.languageCode);
+      await vg.setRate(appSettings.speechRate);
+      await vg.speak(
+        appSettings.languageCode == 'ur-PK'
+            ? 'سیٹنگز اسکرین ہیلپ۔ زبان، وائس گائیڈ، اور دیگر ترتیبات ایڈجسٹ کریں۔'
+            : 'Settings screen help. Adjust language, voice guide, and preferences.',
+      );
+    }
   }
 }
 
+// -------------------- WIDGETS --------------------
 Widget _section({
   required BuildContext context,
   required String title,
@@ -198,14 +327,14 @@ Widget _section({
       borderRadius: BorderRadius.circular(16),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(theme.brightness == Brightness.light ? 0.06 : 0.2),
+          color: Colors.black.withOpacity(
+            theme.brightness == Brightness.light ? 0.06 : 0.2,
+          ),
           blurRadius: 10,
           offset: const Offset(0, 4),
         ),
       ],
-      border: Border.all(
-        color: theme.dividerColor.withOpacity(0.3),
-      ),
+      border: Border.all(color: theme.dividerColor.withOpacity(0.3)),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -214,10 +343,13 @@ Widget _section({
           children: [
             Icon(icon, color: Colors.blue),
             const SizedBox(width: 8),
-            Text(title,
-                style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: theme.colorScheme.onSurface)),
+            Text(
+              title,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 12),
@@ -239,13 +371,9 @@ Widget _chip({
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: selected
-            ? const Color(0xFFE8F1FF)
-            : theme.colorScheme.surface,
+        color: selected ? const Color(0xFFE8F1FF) : theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: selected ? Colors.blue : theme.dividerColor,
-        ),
+        border: Border.all(color: selected ? Colors.blue : theme.dividerColor),
       ),
       child: Text(
         label,
@@ -275,11 +403,14 @@ Widget _tile({
     child: Row(
       children: [
         Expanded(
-            child: Text(label,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.onSurface,
-                ))),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+        ),
         trailing,
       ],
     ),
@@ -306,13 +437,20 @@ class _InfoRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(label,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.onSurface,
-                )),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
           ),
-          Text(value, style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6))),
+          Text(
+            value,
+            style: TextStyle(
+              color: theme.colorScheme.onSurface.withOpacity(0.6),
+            ),
+          ),
         ],
       ),
     );

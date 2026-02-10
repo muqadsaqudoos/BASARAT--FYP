@@ -10,23 +10,16 @@ class VoiceGuideService {
   bool _isInitializing = false;
   bool _hasError = false;
   String? _errorMessage;
-  
-  VoiceGuideService() {
-    // Constructor doesn't initialize - use initialize() method instead
-  }
 
-  /// Get error status
+  /// Error status
   bool get hasError => _hasError;
   String? get errorMessage => _errorMessage;
 
-  /// Initialize TTS engine - must be called before first use
+  /// Initialize TTS
   Future<bool> initialize() async {
-    if (_isInitialized) {
-      return true;
-    }
+    if (_isInitialized) return true;
 
     if (_isInitializing) {
-      // Wait for ongoing initialization to complete
       while (_isInitializing) {
         await Future.delayed(const Duration(milliseconds: 100));
       }
@@ -34,42 +27,21 @@ class VoiceGuideService {
     }
 
     _isInitializing = true;
+
     try {
-      print('=== INITIALIZING TTS ENGINE ===');
-      
-      // Initialize TTS
-      await _tts.setLanguage('en-US');
       await _tts.setSpeechRate(0.5);
       await _tts.setVolume(1.0);
       await _tts.setPitch(1.0);
 
-      // On web, ensure the engine is ready
       if (kIsWeb) {
-        // Wait a bit for web TTS to be ready
         await Future.delayed(const Duration(milliseconds: 100));
-      }
-
-      // Test if TTS is available by getting engines
-      try {
-        final engines = await _tts.getEngines;
-        print('TTS engines available: ${engines.length}');
-        if (engines.isEmpty) {
-          print('WARNING: No TTS engines found!');
-        }
-      } catch (e) {
-        print('Could not get TTS engines: $e');
       }
 
       _isInitialized = true;
       _hasError = false;
       _errorMessage = null;
-      print('=== TTS ENGINE INITIALIZED SUCCESSFULLY ===');
       return true;
-    } catch (e, stackTrace) {
-      print('=== ERROR INITIALIZING TTS ENGINE ===');
-      print('Error: $e');
-      print('Stack trace: $stackTrace');
-      _isInitialized = false;
+    } catch (e) {
       _hasError = true;
       _errorMessage = e.toString();
       return false;
@@ -78,92 +50,95 @@ class VoiceGuideService {
     }
   }
 
+  /// Set language with Urdu fallback
   Future<void> setLanguage(String languageCode) async {
-    if (!_isInitialized) {
-      await initialize();
-    }
+    if (!_isInitialized) await initialize();
+
     try {
-      await _tts.setLanguage(languageCode);
+      await _tts.stop();
+
+      var result = await _tts.setLanguage(languageCode);
+
+      if (result != 1 && languageCode == 'ur-PK') {
+        await _tts.setLanguage('ur-IN');
+      }
     } catch (e) {
-      print('Error setting language: $e');
+      debugPrint('Language error: $e');
     }
   }
 
+  /// Set speech rate
   Future<void> setRate(double rate) async {
-    if (!_isInitialized) {
-      await initialize();
-    }
-    try {
-      await _tts.setSpeechRate(rate);
-    } catch (e) {
-      print('Error setting speech rate: $e');
-    }
+    if (!_isInitialized) await initialize();
+    await _tts.setSpeechRate(rate);
   }
 
+  /// Speak text
   Future<void> speak(String text) async {
     if (text.trim().isEmpty) return;
-    
-    // Ensure TTS is initialized before speaking
-    if (!_isInitialized) {
-      final initialized = await initialize();
-      if (!initialized) {
-        print('ERROR: Cannot speak - TTS not initialized');
-        return;
-      }
-    }
+
+    if (!_isInitialized && !await initialize()) return;
 
     try {
-      // Stop any ongoing speech first
       await _tts.stop();
-      // Wait a tiny bit to ensure stop is processed
       await Future.delayed(const Duration(milliseconds: 50));
-      
-      // Speak the full text
-      print('=== SPEAKING FULL TEXT ===');
-      print('Text: "$text"');
-      final result = await _tts.speak(text);
-      print('TTS speak result: $result');
-      
+      await _tts.speak(text);
       _hasError = false;
       _errorMessage = null;
-    } catch (e, stackTrace) {
-      print('=== ERROR SPEAKING TEXT ===');
-      print('Text: "$text"');
-      print('Error: $e');
-      print('Stack trace: $stackTrace');
+    } catch (e) {
       _hasError = true;
       _errorMessage = e.toString();
-      
-      // On web, TTS might require user interaction first
-      if (kIsWeb) {
-        print('TTS error on web - may require user interaction first');
-      }
     }
   }
 
+  /// Stop speaking
   Future<void> stop() async {
-    if (!_isInitialized) return;
-    try {
+    if (_isInitialized) {
       await _tts.stop();
-    } catch (e) {
-      print('Error stopping TTS: $e');
     }
   }
 
+  /// 🔹 NEW: Localized content (English → Urdu)
+  String _getLocalizedText(BuildContext context, String englishText) {
+    final settings = context.read<AppSettings>();
+
+    if (settings.languageCode != 'ur-PK') {
+      return englishText;
+    }
+
+    const Map<String, String> urduTexts = {
+      'Home screen. Choose a feature: Object Detection or Text Reading.':
+          'ہوم اسکرین۔ فیچر منتخب کریں: آبجیکٹ ڈیٹیکشن یا ٹیکسٹ ریڈنگ۔',
+
+      'Listening': 'سن رہا ہوں',
+
+      'Voice commands turned off due to inactivity.':
+          'غیر فعالیت کی وجہ سے وائس کمانڈ بند کر دی گئی ہے۔',
+
+      'Settings screen. Adjust language, voice guide, and preferences.':
+          'سیٹنگز اسکرین۔ زبان، وائس گائیڈ اور ترجیحات تبدیل کریں۔',
+
+      'Object Detection screen. Camera preview. Tap capture to detect objects.':
+          'آبجیکٹ ڈیٹیکشن اسکرین۔ کیمرہ پری ویو۔ تصویر لینے کے لیے بٹن دبائیں۔',
+
+      'Text Reading screen. Capture or select an image to read text.':
+          'ٹیکسٹ ریڈنگ اسکرین۔ تصویر لیں یا منتخب کریں تاکہ متن پڑھا جا سکے۔',
+    };
+
+    return urduTexts[englishText] ?? englishText;
+  }
+
+  /// Speak only if enabled (WITH proper Urdu support)
   Future<void> speakIfEnabled(BuildContext context, String text) async {
     final settings = context.read<AppSettings>();
-    if (!settings.voiceGuideEnabled) {
-      print('Voice guide is disabled in settings');
-      return;
-    }
-    
-    // Ensure initialized
-    if (!_isInitialized) {
-      await initialize();
-    }
-    
+    if (!settings.voiceGuideEnabled) return;
+
+    if (!_isInitialized) await initialize();
+
+    final localizedText = _getLocalizedText(context, text);
+
     await setLanguage(settings.languageCode);
     await setRate(settings.speechRate);
-    await speak(text);
+    await speak(localizedText);
   }
 }

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
 import '../services/voice_guide.dart';
+import '../services/voice_command_service.dart';
 import '../state/app_settings.dart';
+import 'widgets/app_footer.dart';
 
 class ObjectDetectionScreen extends StatefulWidget {
   const ObjectDetectionScreen({super.key});
@@ -23,12 +25,16 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
   void initState() {
     super.initState();
     _initializeCamera();
-    // Announce only once when screen is first created
+
+    // Announce screen once when initialized
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted && !_announced && !_isAnnouncing) {
         _isAnnouncing = true;
         final vg = VoiceGuideService();
-        await vg.speakIfEnabled(context, 'Object Detection screen. Camera preview. Tap capture to detect objects.');
+        await vg.speakIfEnabled(
+          context,
+          'Object Detection screen. Camera preview. Tap capture to detect objects.',
+        );
         if (mounted) {
           setState(() {
             _announced = true;
@@ -65,9 +71,9 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
         _cameraError = true;
         _isLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Camera error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Camera error: $e')));
     }
   }
 
@@ -78,22 +84,20 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // 👇 Fullscreen camera preview
+          // Camera preview
           Positioned.fill(
             child: _isLoading || _cameraError || _cameraController == null
                 ? const Center(child: CircularProgressIndicator())
                 : FutureBuilder<void>(
-              future: _initializeCameraFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                return CameraPreview(_cameraController!);
-              },
-            ),
+                    future: _initializeCameraFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState != ConnectionState.done) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      return CameraPreview(_cameraController!);
+                    },
+                  ),
           ),
-
-          // 👇 Overlay UI
           Column(
             children: [
               // Header
@@ -119,10 +123,8 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
                   ],
                 ),
               ),
-
               const Spacer(),
-
-              // Capture + Speaker buttons
+              // Capture + Speaker
               Container(
                 color: Colors.black.withOpacity(0.5),
                 height: 120,
@@ -130,7 +132,6 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    // Capture Button
                     GestureDetector(
                       onTap: _captureImage,
                       child: Container(
@@ -149,8 +150,6 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
                         ),
                       ),
                     ),
-
-                    // Speaker
                     Align(
                       alignment: Alignment.centerRight,
                       child: Padding(
@@ -168,9 +167,15 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
                               final vg = VoiceGuideService();
                               await vg.setLanguage(appSettings.languageCode);
                               await vg.setRate(appSettings.speechRate);
-                              await vg.speak('Object Detection screen. Camera preview. Tap capture to detect objects.');
+                              await vg.speak(
+                                'Object Detection screen. Camera preview. Tap capture to detect objects.',
+                              );
                             },
-                            icon: const Icon(Icons.volume_up, color: Colors.white, size: 24),
+                            icon: const Icon(
+                              Icons.volume_up,
+                              color: Colors.white,
+                              size: 24,
+                            ),
                           ),
                         ),
                       ),
@@ -178,15 +183,58 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
                   ],
                 ),
               ),
-
-              const SizedBox(height: 80),
+              const SizedBox(height: 120),
             ],
           ),
         ],
       ),
+
+      // Footer with enabled mic
+      bottomNavigationBar: AppFooter(
+        onHome: () => Navigator.pop(context),
+        onHelp: () {},
+        micButton: GestureDetector(
+          onTap: () async {
+            final voiceCommandService = VoiceCommandService();
+            final appSettings = context.read<AppSettings>();
+
+            final permissionGranted = await voiceCommandService
+                .requestMicrophonePermission();
+            if (!permissionGranted) return;
+
+            await voiceCommandService.startListening(
+              context: context,
+              onResult: (command) async {
+                await voiceCommandService.handleVoiceCommand(
+                  command: command,
+                  context: context,
+                  appSettings: appSettings,
+                );
+              },
+              onError: (error) {
+                print('Voice command error: $error');
+              },
+              onStatus: (status) {
+                print('Voice command status: $status');
+              },
+              onPartialResult: (partial) {
+                print('Partial result: $partial');
+              },
+            );
+          },
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: const BoxDecoration(
+              color: Colors.blue,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.mic, color: Colors.white),
+          ),
+        ),
+      ),
     );
   }
-
 
   Future<void> _captureImage() async {
     if (_cameraController == null) return;
@@ -194,14 +242,14 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
       await _initializeCameraFuture;
       final file = await _cameraController!.takePicture();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Image captured: ${file.name}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Image captured: ${file.name}')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Capture failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Capture failed: $e')));
     }
   }
 

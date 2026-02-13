@@ -98,18 +98,17 @@ class TextResultScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // 🔊 Read Aloud Button
+            // 🔊 Read Aloud Button — FIXED
             ElevatedButton.icon(
               onPressed: () async {
-                if (text.isNotEmpty) {
-                  if (isRtl) {
-                    await vg.setLanguage("ur-PK");
-                  } else {
-                    await vg.setLanguage("en-US");
-                  }
-                  await vg.setRate(appSettings.speechRate);
-                  await vg.speak(text);
-                }
+                if (text.isEmpty) return;
+
+                // Set language and rate according to detected language
+                await vg.setLanguage(isRtl ? "ur-PK" : "en-US");
+                await vg.setRate(appSettings.speechRate);
+
+                // Only speaks if voice guide is enabled
+                await vg.speakIfEnabled(context, text);
               },
               icon: const Icon(Icons.volume_up),
               label: const Text("Read Aloud"),

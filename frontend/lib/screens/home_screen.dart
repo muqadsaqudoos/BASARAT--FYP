@@ -1,4 +1,3 @@
-// home_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'text_reader_screen.dart';
@@ -19,22 +18,24 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final VoiceCommandService _voiceCommandService = VoiceCommandService();
   bool _isListening = false;
-  bool _announced = false;
-  bool _isAnnouncing = false;
   late AnimationController _rippleController;
   late Animation<double> _rippleAnimation;
   String? _recognizedCommand;
   String? _statusMessage;
   Timer? _commandDisplayTimer;
   Timer? _inactivityTimer;
+  bool _announced = false;
+  bool _isAnnouncing = false;
 
   @override
   void initState() {
     super.initState();
+
     _rippleController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     );
+
     _rippleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _rippleController, curve: Curves.easeOut),
     );
@@ -72,12 +73,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _clearRecognizedCommand() {
-    if (mounted) {
-      setState(() {
-        _recognizedCommand = null;
-        _statusMessage = null;
-      });
-    }
+    if (!mounted) return;
+    setState(() {
+      _recognizedCommand = null;
+      _statusMessage = null;
+    });
   }
 
   void _startInactivityTimer() {
@@ -131,7 +131,29 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     final hasPermission = await _voiceCommandService
         .requestMicrophonePermission();
-    if (!hasPermission) return;
+    if (!hasPermission) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Microphone Permission Denied'),
+            content: const Text(
+              'Microphone access was denied. To enable voice commands:\n\n'
+              '1. Click the lock/info icon in your browser address bar\n'
+              '2. Find “Microphone” and change it to “Allow”\n'
+              '3. Refresh this page and try again',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
 
     setState(() => _isListening = true);
     _rippleController.repeat();
@@ -187,15 +209,47 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       },
       onError: (error) {
         if (!mounted) return;
+
         _rippleController.stop();
         _inactivityTimer?.cancel();
         setState(() => _isListening = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Voice command error: $error'),
-            duration: const Duration(seconds: 5),
-          ),
-        );
+
+        if (error.contains('permission') || error.contains('Microphone')) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Microphone Permission Required'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text(
+                    'To use voice commands, please allow microphone access:',
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    '1. Look for a microphone icon in your browser address bar',
+                  ),
+                  Text('2. Click on it and select "Allow"'),
+                  Text('3. Refresh the page and try again'),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Voice command error: $error'),
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
       },
       context: context,
     );
@@ -260,7 +314,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       body: Stack(
         children: [
           Padding(
-            padding: const EdgeInsets.all(20.0),
+            padding: const EdgeInsets.all(20),
             child: Column(
               children: [
                 Expanded(
@@ -395,7 +449,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
         ],
       ),
-      floatingActionButton: _buildMicrophoneButton(),
+      floatingActionButton: Container(
+        width: 56,
+        height: 56,
+        decoration: const BoxDecoration(
+          color: Colors.blue,
+          shape: BoxShape.circle,
+        ),
+        child: IconButton(
+          onPressed: () async {
+            if (!appSettings.voiceGuideEnabled)
+              appSettings.toggleVoiceGuide(true);
+            final vg = VoiceGuideService();
+            await vg.speakIfEnabled(
+              context,
+              'Home screen. Choose a feature: Object Detection or Text Reading.',
+            );
+          },
+          icon: const Icon(Icons.volume_up, color: Colors.white, size: 24),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: Container(
         margin: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -552,14 +626,43 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildMicrophoneButton() {
     return SizedBox(
-      width: 56,
-      height: 56,
-      child: IconButton(
-        onPressed: _handleMicrophoneClick,
-        icon: Icon(
-          _isListening ? Icons.mic : Icons.mic_none,
-          color: Colors.white,
-        ),
+      width: 80,
+      height: 80,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          if (_isListening)
+            AnimatedBuilder(
+              animation: _rippleAnimation,
+              builder: (_, __) => Container(
+                width: 56 + (_rippleAnimation.value * 15),
+                height: 56 + (_rippleAnimation.value * 15),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.red.withOpacity(1.0 - _rippleAnimation.value),
+                    width: 2,
+                  ),
+                ),
+              ),
+            ),
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: _isListening ? Colors.red : Colors.blue,
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              onPressed: _handleMicrophoneClick,
+              icon: Icon(
+                _isListening ? Icons.mic : Icons.mic_none,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -48,8 +48,11 @@ class TextResultScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             const SizedBox(height: 20),
-            const Icon(Icons.insert_drive_file,
-                size: 60, color: Color(0xFF0B63CE)),
+            const Icon(
+              Icons.insert_drive_file,
+              size: 60,
+              color: Color(0xFF0B63CE),
+            ),
             const SizedBox(height: 16),
             const Text(
               "Text Read Successfully!",
@@ -66,34 +69,42 @@ class TextResultScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // 📄 Extracted text card
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    text.isNotEmpty ? text : "No text detected",
-                    style: const TextStyle(fontSize: 16, color: Colors.black87),
-                    textAlign: isRtl ? TextAlign.right : TextAlign.left,
+            // 📄 Extracted text card – fixed height, scrollable when text is long
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        text.isNotEmpty ? text : "No text detected",
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Colors.black87,
+                        ),
+                        textAlign: isRtl ? TextAlign.right : TextAlign.left,
+                      ),
+                      const SizedBox(height: 8),
+                      Chip(
+                        label: Text("Detected: $detectedLang"),
+                        backgroundColor: Colors.blue.shade50,
+                        labelStyle: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF0B63CE),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  Chip(
-                    label: Text("Detected: $detectedLang"),
-                    backgroundColor: Colors.blue.shade50,
-                    labelStyle: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF0B63CE),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
             const SizedBox(height: 20),
@@ -137,7 +148,7 @@ class TextResultScreen extends StatelessWidget {
                 minimumSize: const Size(double.infinity, 50),
               ),
             ),
-            const Spacer(),
+            const SizedBox(height: 16),
 
             // 🔄 Retake + 🏠 Home buttons
             Row(

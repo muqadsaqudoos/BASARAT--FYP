@@ -14,7 +14,10 @@ PORT = 8000
 # Model Configuration
 BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = os.environ.get("MODEL_PATH", str(BASE_DIR.parent / "models" / "yolo_model.pt"))
+# YOLO for object detection (POST /detect) — no image storage
+YOLO_DETECT_MODEL = os.environ.get("YOLO_DETECT_MODEL", str(BASE_DIR.parent / "models" / "yolov8n.pt"))
 DEFAULT_CONFIDENCE = float(os.environ.get("DEFAULT_CONFIDENCE", 0.35))
+DETECT_CONFIDENCE = float(os.environ.get("DETECT_CONFIDENCE", "0.30"))  # backend threshold
 
 
 # OCR Configuration

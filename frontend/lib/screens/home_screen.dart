@@ -242,19 +242,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       appBar: AppBar(
         backgroundColor: isDarkMode ? Colors.grey.shade900 : Colors.white,
         elevation: 0,
-        leading: const SizedBox(),
+        centerTitle: false,
+        leading: const SizedBox(width: 16),
+        titleSpacing: 0,
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.blue,
-                borderRadius: BorderRadius.circular(8),
+            SizedBox(
+              width: 28,
+              height: 28,
+              child: Image.asset(
+                'assets/images/basarat_logo.jpg',
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => Icon(Icons.visibility, color: Colors.blue.shade700, size: 24),
               ),
-              child: const Icon(Icons.visibility, color: Colors.white, size: 24),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Text(
               "بصارت",
               style: TextStyle(

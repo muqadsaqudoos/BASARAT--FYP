@@ -1,6 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
+import 'package:image/image.dart' as img;
+
+import '../api/detection_api.dart';
 import '../services/voice_guide.dart';
 import '../services/voice_command_service.dart';
 import '../state/app_settings.dart';
@@ -21,6 +26,11 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
   bool _announced = false;
   bool _isAnnouncing = false;
 
+  /// True while capture → compress → upload → waiting for response.
+  bool _isDetecting = false;
+  /// Non-null when last request failed: show error UI with Retry / Back.
+  String? _detectionError;
+
   @override
   void initState() {
     super.initState();
@@ -31,6 +41,10 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
       if (mounted && !_announced && !_isAnnouncing) {
         _isAnnouncing = true;
         final vg = VoiceGuideService();
+        await vg.speakIfEnabled(
+          context,
+          'Object Detection. Tap Capture and Detect to take a photo and detect objects.',
+        );
         await vg.speakIfEnabled(
           context,
           'Object Detection screen. Camera preview. Tap capture to detect objects.',
@@ -64,6 +78,7 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
       setState(() {
         _cameraController = controller;
         _isLoading = false;
+        _detectionError = null;
       });
     } catch (e) {
       if (!mounted) return;
@@ -71,6 +86,84 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
         _cameraError = true;
         _isLoading = false;
       });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Camera error: $e')));
+    }
+  }
+
+  /// Compress and resize image; save to temp file. Returns the file.
+  Future<File> _compressAndSave(String sourcePath) async {
+    final bytes = await File(sourcePath).readAsBytes();
+    img.Image? decoded = img.decodeImage(bytes);
+    if (decoded == null) return File(sourcePath);
+
+    final w = decoded.width;
+    final h = decoded.height;
+    final max = w > h ? w : h;
+    if (max > kMaxImageDimension) {
+      final scale = kMaxImageDimension / max;
+      decoded = img.copyResize(
+        decoded,
+        width: (w * scale).round(),
+        height: (h * scale).round(),
+      );
+    }
+
+    final jpeg = img.encodeJpg(decoded, quality: kJpegQuality);
+    final tempDir = Directory.systemTemp;
+    final file = File('${tempDir.path}/detect_${DateTime.now().millisecondsSinceEpoch}.jpg');
+    await file.writeAsBytes(jpeg);
+    return file;
+  }
+
+  Future<void> _captureAndDetect() async {
+    if (_cameraController == null || _isDetecting) return;
+
+    setState(() {
+      _isDetecting = true;
+      _detectionError = null;
+    });
+
+    File? tempFile;
+    try {
+      await _initializeCameraFuture;
+      final xFile = await _cameraController!.takePicture();
+      if (!mounted) return;
+      tempFile = await _compressAndSave(xFile.path);
+      if (!mounted) return;
+
+      final response = await postDetect(tempFile);
+      if (!mounted) return;
+
+      final list = postProcessDetections(response.detections);
+      if (!mounted) return;
+
+      setState(() {
+        _isDetecting = false;
+        _detectionError = null;
+      });
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DetectionResultScreen(detections: list),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isDetecting = false;
+        _detectionError = 'Detection failed. Check internet or server.';
+      });
+    } finally {
+      try {
+        if (tempFile != null && await tempFile.exists()) await tempFile.delete();
+      } catch (_) {}
+    }
+  }
+
+  void _clearErrorAndRetry() {
+    setState(() => _detectionError = null);
+    _captureAndDetect();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Camera error: $e')));
@@ -80,6 +173,54 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
   @override
   Widget build(BuildContext context) {
     final appSettings = context.watch<AppSettings>();
+
+    if (_detectionError != null) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text('Object Detection', style: TextStyle(color: Colors.white)),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.wifi_off, size: 64, color: Colors.white54),
+                const SizedBox(height: 24),
+                Text(
+                  _detectionError!,
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    FilledButton(
+                      onPressed: _clearErrorAndRetry,
+                      child: const Text('Retry'),
+                    ),
+                    const SizedBox(width: 16),
+                    OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(foregroundColor: Colors.white),
+                      child: const Text('Back'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -87,8 +228,16 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
           // Camera preview
           Positioned.fill(
             child: _isLoading || _cameraError || _cameraController == null
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: CircularProgressIndicator(color: Colors.white))
                 : FutureBuilder<void>(
+                    future: _initializeCameraFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState != ConnectionState.done) {
+                        return const Center(child: CircularProgressIndicator(color: Colors.white));
+                      }
+                      return CameraPreview(_cameraController!);
+                    },
+                  ),
                     future: _initializeCameraFuture,
                     builder: (context, snapshot) {
                       if (snapshot.connectionState != ConnectionState.done) {
@@ -98,11 +247,26 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
                     },
                   ),
           ),
+
+          if (_isDetecting)
+            Container(
+              color: Colors.black54,
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 16),
+                    Text('Detecting…', style: TextStyle(color: Colors.white, fontSize: 18)),
+                  ],
+                ),
+              ),
+            ),
+
           Column(
             children: [
-              // Header
               Container(
-                color: Colors.black.withOpacity(0.5),
+                color: Colors.black.withValues(alpha: 0.5),
                 padding: const EdgeInsets.fromLTRB(24, 44, 24, 16),
                 child: Row(
                   children: [
@@ -126,25 +290,28 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
               const Spacer(),
               // Capture + Speaker
               Container(
-                color: Colors.black.withOpacity(0.5),
+                color: Colors.black.withValues(alpha: 0.5),
                 height: 120,
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
                     GestureDetector(
-                      onTap: _captureImage,
+                      onTap: _isDetecting ? null : _captureAndDetect,
                       child: Container(
                         width: 80,
                         height: 80,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 3),
+                          border: Border.all(
+                            color: _isDetecting ? Colors.grey : Colors.white,
+                            width: 3,
+                          ),
                         ),
                         child: Container(
                           margin: const EdgeInsets.all(8),
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
+                          decoration: BoxDecoration(
+                            color: _isDetecting ? Colors.grey : Colors.white,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -168,6 +335,9 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
                               await vg.setLanguage(appSettings.languageCode);
                               await vg.setRate(appSettings.speechRate);
                               await vg.speak(
+                                'Object Detection. Tap the white button to capture and detect objects.',
+                              );
+                              await vg.speak(
                                 'Object Detection screen. Camera preview. Tap capture to detect objects.',
                               );
                             },
@@ -183,7 +353,7 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 120),
+              const SizedBox(height: 80),
             ],
           ),
         ],
@@ -201,6 +371,7 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
             final permissionGranted = await voiceCommandService
                 .requestMicrophonePermission();
             if (!permissionGranted) return;
+            if (!mounted) return;
 
             await voiceCommandService.startListening(
               context: context,
@@ -212,13 +383,13 @@ class _ObjectDetectionScreenState extends State<ObjectDetectionScreen> {
                 );
               },
               onError: (error) {
-                print('Voice command error: $error');
+                debugPrint('Voice command error: $error');
               },
               onStatus: (status) {
-                print('Voice command status: $status');
+                debugPrint('Voice command status: $status');
               },
               onPartialResult: (partial) {
-                print('Partial result: $partial');
+                debugPrint('Partial result: $partial');
               },
             );
           },

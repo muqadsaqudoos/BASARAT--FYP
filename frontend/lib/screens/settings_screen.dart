@@ -117,7 +117,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   label: 'Voice Guide',
                   trailing: Switch(
                     value: settings.voiceGuideEnabled,
-                    activeColor: Colors.blue,
+                    activeThumbColor: Colors.blue,
                     onChanged: (value) async {
                       settings.toggleVoiceGuide(value);
                       await _speakVoiceGuideToggle(
@@ -172,10 +172,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _tile(
                   context: context,
                   label: 'Dark Mode',
-                  trailing: Switch(
-                    value: settings.darkModeEnabled,
-                    activeColor: Colors.blue,
-                    onChanged: settings.setDarkMode,
+trailing: Switch(
+                  value: settings.darkModeEnabled,
+                  activeThumbColor: Colors.blue,
+                  onChanged: settings.setDarkMode,
                   ),
                 ),
                 _tile(
@@ -183,7 +183,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   label: 'Vibration',
                   trailing: Switch(
                     value: settings.vibrationEnabled,
-                    activeColor: Colors.blue,
+                    activeThumbColor: Colors.blue,
                     onChanged: settings.setVibration,
                   ),
                 ),
@@ -327,14 +327,14 @@ Widget _section({
       borderRadius: BorderRadius.circular(16),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(
+          color: Colors.black.withValues(alpha:
             theme.brightness == Brightness.light ? 0.06 : 0.2,
           ),
           blurRadius: 10,
           offset: const Offset(0, 4),
         ),
       ],
-      border: Border.all(color: theme.dividerColor.withOpacity(0.3)),
+      border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3)),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -396,9 +396,9 @@ Widget _tile({
     margin: const EdgeInsets.only(bottom: 10),
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     decoration: BoxDecoration(
-      color: theme.colorScheme.surfaceVariant ?? theme.cardColor,
+      color: theme.colorScheme.surfaceContainerHighest,
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: theme.dividerColor.withOpacity(0.4)),
+      border: Border.all(color: theme.dividerColor.withValues(alpha: 0.4)),
     ),
     child: Row(
       children: [
@@ -430,9 +430,9 @@ class _InfoRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant ?? theme.cardColor,
+        color: theme.colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.4)),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.4)),
       ),
       child: Row(
         children: [
@@ -448,7 +448,7 @@ class _InfoRow extends StatelessWidget {
           Text(
             value,
             style: TextStyle(
-              color: theme.colorScheme.onSurface.withOpacity(0.6),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
         ],

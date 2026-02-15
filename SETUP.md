@@ -32,13 +32,19 @@ The app is designed to assist visually impaired users with features such as **Te
     ## On Android device:
         flutter run -d <device_id>
 
-4. **📝 Additional Notes**
-    -If you add new packages,
-         run flutter pub get again.
+4. **Object detection model (YOLOv8n TFLite)**  
+   The app uses a YOLOv8n model for object detection. You must export it and place it in the project:
+   - Create `frontend/assets/models/` if it does not exist.
+   - From a Python environment:
+     ```bash
+     pip install ultralytics
+     yolo export model=yolov8n.pt format=tflite
+     ```
+   - Copy the generated `yolov8n_saved_model/yolov8n_float32.tflite` (or the default TFLite output) to `frontend/assets/models/yolov8n.tflite`.  
+   - If you see a different output name (e.g. `yolov8n_float32.tflite`), rename it to `yolov8n.tflite`.
 
-    -For Android/iOS builds, ensure you have the respective SDKs and emulators installed.
-
-    -The Text Reading feature requires a physical device for camera access (not supported on Chrome).
-
-    -If you face issues, check the official Flutter documentation:
-    👉 https://docs.flutter.dev/get-started/install
+5. **📝 Additional Notes**
+   - If you add new packages, run `flutter pub get` again.
+   - For Android/iOS builds, ensure you have the respective SDKs and emulators installed.
+   - The Text Reading and Object Detection features require a physical device for camera access (not supported on Chrome).
+   - If you face issues, check the official Flutter documentation: https://docs.flutter.dev/get-started/install

@@ -19,7 +19,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final VoiceCommandService _voiceCommandService = VoiceCommandService();
   bool _isListening = false;
   late AnimationController _rippleController;
-  late Animation<double> _rippleAnimation;
   String? _recognizedCommand;
   String? _statusMessage;
   Timer? _commandDisplayTimer;
@@ -34,10 +33,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _rippleController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
-    );
-
-    _rippleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _rippleController, curve: Curves.easeOut),
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -265,23 +260,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       appBar: AppBar(
         backgroundColor: isDarkMode ? Colors.grey.shade900 : Colors.white,
         elevation: 0,
-        leading: const SizedBox(),
+        centerTitle: false,
+        leading: const SizedBox(width: 16),
+        titleSpacing: 0,
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.blue,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(
-                Icons.visibility,
-                color: Colors.white,
-                size: 24,
+            SizedBox(
+              width: 28,
+              height: 28,
+              child: Image.asset(
+                'assets/images/basarat_logo.jpg',
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => Icon(Icons.visibility, color: Colors.blue.shade700, size: 24),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Text(
               "Basarat",
               style: TextStyle(
@@ -413,7 +407,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
+                      color: Colors.black.withValues(alpha: 0.1),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -458,8 +452,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
         child: IconButton(
           onPressed: () async {
-            if (!appSettings.voiceGuideEnabled)
+            if (!appSettings.voiceGuideEnabled) {
               appSettings.toggleVoiceGuide(true);
+            }
             final vg = VoiceGuideService();
             await vg.speakIfEnabled(
               context,
@@ -477,7 +472,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           borderRadius: BorderRadius.circular(25),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 10,
               offset: const Offset(0, 5),
             ),
@@ -624,49 +619,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildMicrophoneButton() {
-    return SizedBox(
-      width: 80,
-      height: 80,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          if (_isListening)
-            AnimatedBuilder(
-              animation: _rippleAnimation,
-              builder: (_, __) => Container(
-                width: 56 + (_rippleAnimation.value * 15),
-                height: 56 + (_rippleAnimation.value * 15),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.red.withOpacity(1.0 - _rippleAnimation.value),
-                    width: 2,
-                  ),
-                ),
-              ),
-            ),
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: _isListening ? Colors.red : Colors.blue,
-              shape: BoxShape.circle,
-            ),
-            child: IconButton(
-              onPressed: _handleMicrophoneClick,
-              icon: Icon(
-                _isListening ? Icons.mic : Icons.mic_none,
-                color: Colors.white,
-                size: 24,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildFeatureCard({
     required IconData icon,
     required String title,
@@ -684,7 +636,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           border: Border.all(color: Colors.grey.shade200),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),

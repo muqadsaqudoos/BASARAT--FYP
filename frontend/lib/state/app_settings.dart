@@ -1,6 +1,6 @@
-import 'package:flutter/foundation.dart';
-import '../services/voice_guide.dart';
 import 'package:flutter/widgets.dart';
+
+import '../services/voice_guide.dart';
 
 class AppSettings extends ChangeNotifier {
   bool voiceGuideEnabled = true;

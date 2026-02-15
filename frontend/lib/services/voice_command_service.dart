@@ -1,12 +1,12 @@
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'voice_guide.dart';
 import '../state/app_settings.dart';
 import '../screens/object_detection_screen.dart';
 import '../screens/text_reader_screen.dart';
 import '../screens/settings_screen.dart';
-import 'voice_command_service_web.dart' as web_utils;
+import 'voice_command_service_web_stub.dart' // ignore: unused_import
+    if (dart.library.html) 'voice_command_service_web.dart' as web_utils;
 
 /// Voice Command Service - Complete Implementation
 ///

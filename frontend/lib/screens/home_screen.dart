@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../services/voice_guide.dart';
 import '../services/voice_command_service.dart';
 import '../state/app_settings.dart';
+import 'widgets/voice_command_status_banner.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -127,26 +128,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final hasPermission = await _voiceCommandService
         .requestMicrophonePermission();
     if (!hasPermission) {
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Microphone Permission Denied'),
-            content: const Text(
-              'Microphone access was denied. To enable voice commands:\n\n'
-              '1. Click the lock/info icon in your browser address bar\n'
-              '2. Find “Microphone” and change it to “Allow”\n'
-              '3. Refresh this page and try again',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      }
+      debugPrint('Microphone permission not granted; voice not started.');
       return;
     }
 
@@ -159,7 +141,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       appSettings.languageCode == 'ur-PK' ? 'سن رہا ہوں۔' : 'Listening',
     );
 
-    await _voiceCommandService.startListening(
+    final started = await _voiceCommandService.startListening(
       onPartialResult: (command) {
         if (mounted) {
           setState(() {
@@ -202,52 +184,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           );
         }
       },
-      onError: (error) {
-        if (!mounted) return;
-
-        _rippleController.stop();
-        _inactivityTimer?.cancel();
-        setState(() => _isListening = false);
-
-        if (error.contains('permission') || error.contains('Microphone')) {
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Microphone Permission Required'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    'To use voice commands, please allow microphone access:',
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    '1. Look for a microphone icon in your browser address bar',
-                  ),
-                  Text('2. Click on it and select "Allow"'),
-                  Text('3. Refresh the page and try again'),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Voice command error: $error'),
-              duration: const Duration(seconds: 5),
-            ),
-          );
-        }
-      },
       context: context,
     );
+
+    if (!mounted) return;
+    if (!started) {
+      _rippleController.stop();
+      _inactivityTimer?.cancel();
+      setState(() {
+        _isListening = false;
+        _recognizedCommand = null;
+        _statusMessage = null;
+      });
+    }
   }
 
   @override
@@ -389,56 +338,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               left: 20,
               right: 20,
               bottom: 90,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: _statusMessage != null
-                      ? Colors.orange.shade50
-                      : Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: _statusMessage != null
-                        ? Colors.orange.shade200
-                        : Colors.blue.shade200,
-                    width: 1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _statusMessage != null
-                          ? Icons.hourglass_empty
-                          : Icons.mic,
-                      color: _statusMessage != null
-                          ? Colors.orange.shade700
-                          : Colors.blue.shade700,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _statusMessage ?? 'Detected: "$_recognizedCommand"',
-                        style: TextStyle(
-                          color: _statusMessage != null
-                              ? Colors.orange.shade900
-                              : Colors.blue.shade900,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              child: VoiceCommandStatusBanner(
+                statusMessage: _statusMessage,
+                recognizedCommand: _recognizedCommand,
               ),
             ),
         ],

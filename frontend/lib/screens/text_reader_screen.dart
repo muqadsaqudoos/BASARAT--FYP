@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +9,7 @@ import '../services/voice_command_service.dart';
 import '../state/app_settings.dart';
 import 'text_result_screen.dart';
 import 'widgets/app_footer.dart';
+import 'widgets/voice_command_status_banner.dart';
 
 class TextReaderScreen extends StatefulWidget {
   const TextReaderScreen({super.key});
@@ -22,6 +25,11 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
   bool _cameraError = false;
 
   late final VoiceCommandService _voiceCommandService;
+  bool _isVoiceListening = false;
+  String? _recognizedCommand;
+  String? _statusMessage;
+  Timer? _commandDisplayTimer;
+  Timer? _inactivityTimer;
 
   @override
   void initState() {
@@ -75,6 +83,131 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
         ? 'ٹیکسٹ ریڈنگ اسکرین۔ متن پڑھنے کے لیے کیپچر پر ٹیپ کریں۔'
         : 'Text Reading screen. Tap capture to read text.';
     await vg.speak(message);
+  }
+
+  void _clearRecognizedCommand() {
+    if (!mounted) return;
+    setState(() {
+      _recognizedCommand = null;
+      _statusMessage = null;
+    });
+  }
+
+  void _startInactivityTimer() {
+    _inactivityTimer?.cancel();
+    _inactivityTimer = Timer(const Duration(seconds: 120), () async {
+      if (mounted && _isVoiceListening) {
+        await _voiceCommandService.stopListening();
+        if (!mounted) return;
+        _commandDisplayTimer?.cancel();
+        final appSettings = context.read<AppSettings>();
+        if (appSettings.voiceGuideEnabled) {
+          final vg = VoiceGuideService();
+          await vg.speakIfEnabled(
+            context,
+            appSettings.languageCode == 'ur-PK'
+                ? 'غیر فعال ہونے کی وجہ سے وائس کمانڈز بند کردی گئیں۔'
+                : 'Voice commands turned off due to inactivity.',
+          );
+        }
+        if (!mounted) return;
+        setState(() {
+          _isVoiceListening = false;
+          _recognizedCommand = null;
+          _statusMessage = null;
+        });
+      }
+    });
+  }
+
+  void _resetInactivityTimer() {
+    if (_isVoiceListening) _startInactivityTimer();
+  }
+
+  Future<void> _handleFooterMic() async {
+    final appSettings = context.read<AppSettings>();
+    final vg = VoiceGuideService();
+
+    if (_isVoiceListening) {
+      await _voiceCommandService.stopListening();
+      _commandDisplayTimer?.cancel();
+      _inactivityTimer?.cancel();
+      setState(() {
+        _isVoiceListening = false;
+        _recognizedCommand = null;
+        _statusMessage = null;
+      });
+      return;
+    }
+
+    final ok = await _voiceCommandService.requestMicrophonePermission();
+    if (!ok) {
+      debugPrint('Microphone permission not granted; voice not started.');
+      return;
+    }
+    if (!mounted) return;
+
+    setState(() => _isVoiceListening = true);
+    _startInactivityTimer();
+
+    await vg.speakIfEnabled(
+      context,
+      appSettings.languageCode == 'ur-PK' ? 'سن رہا ہوں۔' : 'Listening',
+    );
+    if (!mounted) return;
+
+    final started = await _voiceCommandService.startListening(
+      context: context,
+      onPartialResult: (command) {
+        if (mounted) {
+          setState(() {
+            _recognizedCommand = command;
+            _statusMessage = null;
+          });
+          _commandDisplayTimer?.cancel();
+          _resetInactivityTimer();
+        }
+      },
+      onStatus: (status) {
+        if (mounted) setState(() => _statusMessage = status);
+      },
+      onResult: (command) async {
+        if (!mounted) return;
+        _resetInactivityTimer();
+        _commandDisplayTimer?.cancel();
+        _commandDisplayTimer = Timer(
+          const Duration(seconds: 2),
+          _clearRecognizedCommand,
+        );
+        final appSettings = context.read<AppSettings>();
+        await _voiceCommandService.handleVoiceCommand(
+          command: command,
+          context: context,
+          appSettings: appSettings,
+          onStopListening: () {
+            if (mounted) {
+              _commandDisplayTimer?.cancel();
+              _inactivityTimer?.cancel();
+              setState(() {
+                _isVoiceListening = false;
+                _recognizedCommand = null;
+                _statusMessage = null;
+              });
+            }
+          },
+        );
+      },
+    );
+
+    if (!mounted) return;
+    if (!started) {
+      _inactivityTimer?.cancel();
+      setState(() {
+        _isVoiceListening = false;
+        _recognizedCommand = null;
+        _statusMessage = null;
+      });
+    }
   }
 
   @override
@@ -187,6 +320,16 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
               const SizedBox(height: 90),
             ],
           ),
+          if (_recognizedCommand != null || _statusMessage != null)
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 90,
+              child: VoiceCommandStatusBanner(
+                statusMessage: _statusMessage,
+                recognizedCommand: _recognizedCommand,
+              ),
+            ),
         ],
       ),
       // FOOTER
@@ -194,37 +337,7 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
         onHome: () => Navigator.pop(context),
         onHelp: () => _showHelpDialog(context),
         micButton: GestureDetector(
-          onTap: () async {
-            final permissionGranted = await _voiceCommandService
-                .requestMicrophonePermission();
-            if (!permissionGranted) return;
-
-            if (_voiceCommandService.isListening) {
-              await _voiceCommandService.stopListening();
-              return;
-            }
-
-            await _voiceCommandService.startListening(
-              context: context,
-              onResult: (command) async {
-                final appSettings = context.read<AppSettings>();
-                await _voiceCommandService.handleVoiceCommand(
-                  command: command,
-                  context: context,
-                  appSettings: appSettings,
-                );
-              },
-              onError: (error) {
-                print('Voice command error: $error');
-              },
-              onStatus: (status) {
-                print('Voice command status: $status');
-              },
-              onPartialResult: (partial) {
-                print('Partial result: $partial');
-              },
-            );
-          },
+          onTap: _handleFooterMic,
           child: Container(
             width: 56,
             height: 56,
@@ -232,7 +345,10 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
               color: Colors.blue,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.mic, color: Colors.white),
+            child: Icon(
+              _isVoiceListening ? Icons.mic : Icons.mic_none,
+              color: Colors.white,
+            ),
           ),
         ),
       ),
@@ -297,6 +413,8 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
 
   @override
   void dispose() {
+    _commandDisplayTimer?.cancel();
+    _inactivityTimer?.cancel();
     _cameraController?.dispose();
     _voiceCommandService.dispose();
     super.dispose();

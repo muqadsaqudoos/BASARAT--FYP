@@ -31,7 +31,6 @@ class VoiceCommandService {
 
   // Callbacks for UI updates
   Function(String)? _onResultCallback;
-  Function(String)? _onErrorCallback;
   Function(String)? _onPartialResultCallback;
   Function(String)? _onStatusCallback;
   BuildContext? _context;
@@ -44,6 +43,23 @@ class VoiceCommandService {
   // Restart management: Prevent rapid restarts
   DateTime? _lastRestartTime;
   static const Duration _restartCooldown = Duration(milliseconds: 500);
+
+  /// Off phrases must be matched before on phrases (e.g. "turn off dark mode"
+  /// also contains the substring "dark mode").
+  static const List<String> _darkModeOffPhrases = [
+    'turn off dark mode',
+    'disable dark mode',
+    'light mode',
+    'light theme',
+    'turn on light mode',
+  ];
+
+  static const List<String> _darkModeOnPhrases = [
+    'turn on dark mode',
+    'enable dark mode',
+    'dark mode',
+    'dark theme',
+  ];
 
   /// Command keyword lists - organized by priority (most common first)
   /// Each command has multiple keyword variations for better recognition
@@ -130,20 +146,6 @@ class VoiceCommandService {
       'normal speed',
       'default speed',
     ],
-    'dark_mode_on': [
-      'dark mode',
-      'enable dark mode',
-      'turn on dark mode',
-      'dark theme',
-      'dark',
-    ],
-    'dark_mode_off': [
-      'light mode',
-      'disable dark mode',
-      'turn off dark mode',
-      'light theme',
-      'light',
-    ],
     'vibration_on': [
       'enable vibration',
       'turn on vibration',
@@ -161,6 +163,10 @@ class VoiceCommandService {
       'no vibration',
     ],
     'voice_command_off': [
+      'turn off microphone',
+      'turn microphone off',
+      'turn off mic',
+      'mic off',
       'stop voice command',
       'turn off voice command',
       'stop listening',
@@ -197,10 +203,8 @@ class VoiceCommandService {
       print('[VoiceCommand] Initializing speech recognition...');
       final available = await _speech.initialize(
         onError: (error) {
-          print('[VoiceCommand] Error: ${error.errorMsg}');
-          if (_onErrorCallback != null) {
-            _onErrorCallback!(error.errorMsg);
-          }
+          // Log only — never surface STT engine errors to the UI (timeouts, client, etc.).
+          debugPrint('[VoiceCommand] STT error: ${error.errorMsg}');
         },
         onStatus: (status) {
           _handleStatusChange(status);
@@ -241,9 +245,7 @@ class VoiceCommandService {
     }
 
     // Check if we have all required callbacks and context
-    if (_onResultCallback == null ||
-        _onErrorCallback == null ||
-        _context == null) {
+    if (_onResultCallback == null || _context == null) {
       print('[VoiceCommand] Cannot restart - missing callbacks or context');
       return;
     }
@@ -306,13 +308,12 @@ class VoiceCommandService {
   ///
   /// Parameters:
   /// - onResult: Called when a recognized command is processed
-  /// - onError: Called when an error occurs
   /// - context: BuildContext for navigation
   /// - onPartialResult: Optional - called with real-time recognized text
   /// - onStatus: Optional - called with status updates (listening, restarting, etc.)
-  Future<void> startListening({
+  /// Returns `true` if listening started; `false` if init failed or [listen] threw.
+  Future<bool> startListening({
     required Function(String command) onResult,
-    required Function(String error) onError,
     required BuildContext context,
     Function(String)? onPartialResult,
     Function(String)? onStatus,
@@ -321,10 +322,10 @@ class VoiceCommandService {
     if (!_isInitialized) {
       final initialized = await initialize();
       if (!initialized) {
-        onError(
-          'Speech recognition not available. Please check microphone permissions.',
+        debugPrint(
+          '[VoiceCommand] Speech recognition not available (init failed).',
         );
-        return;
+        return false;
       }
     }
 
@@ -338,7 +339,6 @@ class VoiceCommandService {
 
       // Store callbacks and context for auto-restart
       _onResultCallback = onResult;
-      _onErrorCallback = onError;
       _onPartialResultCallback = onPartialResult;
       _onStatusCallback = onStatus;
       _context = context;
@@ -367,21 +367,16 @@ class VoiceCommandService {
       );
 
       print('[VoiceCommand] Speech recognition started');
+      return true;
     } catch (e, stackTrace) {
       _isListening = false;
-      print('[VoiceCommand] Error starting recognition: $e');
-      print('[VoiceCommand] Stack trace: $stackTrace');
-
-      final errorMsg = e.toString().toLowerCase();
-      if (errorMsg.contains('permission') ||
-          errorMsg.contains('not allowed') ||
-          errorMsg.contains('denied')) {
-        onError(
-          'Microphone permission denied. Please allow microphone access.',
-        );
-      } else {
-        onError('Failed to start listening: $e');
-      }
+      _onResultCallback = null;
+      _onPartialResultCallback = null;
+      _onStatusCallback = null;
+      _context = null;
+      debugPrint('[VoiceCommand] Error starting recognition: $e');
+      debugPrint('[VoiceCommand] Stack trace: $stackTrace');
+      return false;
     }
   }
 
@@ -465,7 +460,7 @@ class VoiceCommandService {
       print('[VoiceCommand] Error restarting: $e');
 
       if (_onStatusCallback != null) {
-        _onStatusCallback!('Error. Retrying...');
+        _onStatusCallback!('Reconnecting…');
       }
 
       // Retry after delay
@@ -495,7 +490,6 @@ class VoiceCommandService {
 
       // Clear callbacks
       _onResultCallback = null;
-      _onErrorCallback = null;
       _onPartialResultCallback = null;
       _onStatusCallback = null;
       _context = null;
@@ -507,6 +501,26 @@ class VoiceCommandService {
 
   /// Check if currently listening
   bool get isListening => _isListening;
+
+  static String? _matchDarkModeAction(String lowerCommand) {
+    if (lowerCommand == 'light') {
+      return 'dark_mode_off';
+    }
+    if (lowerCommand == 'dark') {
+      return 'dark_mode_on';
+    }
+    for (final p in _darkModeOffPhrases) {
+      if (lowerCommand.contains(p)) {
+        return 'dark_mode_off';
+      }
+    }
+    for (final p in _darkModeOnPhrases) {
+      if (lowerCommand.contains(p)) {
+        return 'dark_mode_on';
+      }
+    }
+    return null;
+  }
 
   /// Process voice command using keyword matching
   /// Returns the action string if a command is recognized, null otherwise
@@ -531,6 +545,12 @@ class VoiceCommandService {
         '[VoiceCommand] Matched: text_reading (single word: "$lowerCommand")',
       );
       return 'text_reading';
+    }
+
+    final darkAction = _matchDarkModeAction(lowerCommand);
+    if (darkAction != null) {
+      print('[VoiceCommand] Matched: $darkAction (theme)');
+      return darkAction;
     }
 
     // Loop through all command keywords
@@ -747,7 +767,6 @@ class VoiceCommandService {
     _isListening = false;
     _isInitialized = false;
     _onResultCallback = null;
-    _onErrorCallback = null;
     _onPartialResultCallback = null;
     _onStatusCallback = null;
     _context = null;

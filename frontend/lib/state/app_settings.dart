@@ -5,8 +5,8 @@ import '../services/voice_guide.dart';
 class AppSettings extends ChangeNotifier {
   bool voiceGuideEnabled = true;
   String languageCode = 'en-US';
-  /// Default: fast (0.8). 0.3 = slow, 0.5 = normal.
-  double speechRate = 0.8;
+  /// Voice guide: slow 0.3, normal 0.5 (default), fast 0.8 — matches Settings chips.
+  double speechRate = 0.5;
   bool vibrationEnabled = true;
   bool darkModeEnabled = false;
 

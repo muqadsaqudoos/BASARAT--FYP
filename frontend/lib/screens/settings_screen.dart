@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/app_settings.dart';
 import '../services/voice_guide.dart';
 import '../services/voice_command_service.dart';
-import 'widgets/app_footer.dart'; // ✅ footer
+import 'widgets/app_footer.dart';
+import 'widgets/voice_command_status_banner.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -16,6 +19,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _announced = false;
   bool _isAnnouncing = false;
   late final VoiceCommandService _voiceCommandService;
+  bool _isVoiceListening = false;
+  String? _recognizedCommand;
+  String? _statusMessage;
+  Timer? _commandDisplayTimer;
+  Timer? _inactivityTimer;
 
   @override
   void initState() {
@@ -31,6 +39,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final vg = VoiceGuideService();
         await vg.setLanguage(appSettings.languageCode);
         await vg.setRate(appSettings.speechRate);
+        if (!mounted) return;
 
         final fullMessage = appSettings.languageCode == 'ur-PK'
             ? 'سیٹنگز اسکرین۔ زبان، وائس گائیڈ، اور دیگر ترتیبات ایڈجسٹ کریں۔'
@@ -50,6 +59,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    _commandDisplayTimer?.cancel();
+    _inactivityTimer?.cancel();
     _voiceCommandService.dispose();
     super.dispose();
   }
@@ -74,9 +85,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         centerTitle: true,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Stack(
+        clipBehavior: Clip.none,
         children: [
+          ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
           _section(
             context: context,
             title: 'Language Selection',
@@ -202,6 +216,18 @@ trailing: Switch(
             ),
           ),
           const SizedBox(height: 100),
+            ],
+          ),
+          if (_recognizedCommand != null || _statusMessage != null)
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 90,
+              child: VoiceCommandStatusBanner(
+                statusMessage: _statusMessage,
+                recognizedCommand: _recognizedCommand,
+              ),
+            ),
         ],
       ),
       bottomNavigationBar: AppFooter(
@@ -216,7 +242,10 @@ trailing: Switch(
               color: Color(0xFF0B63CE),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.mic, color: Colors.white),
+            child: Icon(
+              _isVoiceListening ? Icons.mic : Icons.mic_none,
+              color: Colors.white,
+            ),
           ),
         ),
       ),
@@ -248,32 +277,128 @@ trailing: Switch(
     );
   }
 
-  void _handleMicPress() async {
+  void _clearRecognizedCommand() {
+    if (!mounted) return;
+    setState(() {
+      _recognizedCommand = null;
+      _statusMessage = null;
+    });
+  }
+
+  void _startInactivityTimer() {
+    _inactivityTimer?.cancel();
+    _inactivityTimer = Timer(const Duration(seconds: 120), () async {
+      if (mounted && _isVoiceListening) {
+        await _voiceCommandService.stopListening();
+        if (!mounted) return;
+        _commandDisplayTimer?.cancel();
+        final appSettings = context.read<AppSettings>();
+        if (appSettings.voiceGuideEnabled) {
+          final vg = VoiceGuideService();
+          await vg.speakIfEnabled(
+            context,
+            appSettings.languageCode == 'ur-PK'
+                ? 'غیر فعال ہونے کی وجہ سے وائس کمانڈز بند کردی گئیں۔'
+                : 'Voice commands turned off due to inactivity.',
+          );
+        }
+        if (!mounted) return;
+        setState(() {
+          _isVoiceListening = false;
+          _recognizedCommand = null;
+          _statusMessage = null;
+        });
+      }
+    });
+  }
+
+  void _resetInactivityTimer() {
+    if (_isVoiceListening) _startInactivityTimer();
+  }
+
+  Future<void> _handleMicPress() async {
     final appSettings = context.read<AppSettings>();
-    if (!appSettings.voiceGuideEnabled) return;
+    final vg = VoiceGuideService();
 
-    final hasPermission = await _voiceCommandService
-        .requestMicrophonePermission();
-    if (!hasPermission) return;
-
-    if (_voiceCommandService.isListening) {
+    if (_isVoiceListening) {
       await _voiceCommandService.stopListening();
+      _commandDisplayTimer?.cancel();
+      _inactivityTimer?.cancel();
+      setState(() {
+        _isVoiceListening = false;
+        _recognizedCommand = null;
+        _statusMessage = null;
+      });
       return;
     }
 
-    await _voiceCommandService.startListening(
+    final ok = await _voiceCommandService.requestMicrophonePermission();
+    if (!ok) {
+      debugPrint('Microphone permission not granted; voice not started.');
+      return;
+    }
+    if (!mounted) return;
+
+    setState(() => _isVoiceListening = true);
+    _startInactivityTimer();
+
+    await vg.speakIfEnabled(
+      context,
+      appSettings.languageCode == 'ur-PK' ? 'سن رہا ہوں۔' : 'Listening',
+    );
+    if (!mounted) return;
+
+    final started = await _voiceCommandService.startListening(
       context: context,
+      onPartialResult: (command) {
+        if (mounted) {
+          setState(() {
+            _recognizedCommand = command;
+            _statusMessage = null;
+          });
+          _commandDisplayTimer?.cancel();
+          _resetInactivityTimer();
+        }
+      },
+      onStatus: (status) {
+        if (mounted) setState(() => _statusMessage = status);
+      },
       onResult: (command) async {
+        if (!mounted) return;
+        _resetInactivityTimer();
+        _commandDisplayTimer?.cancel();
+        _commandDisplayTimer = Timer(
+          const Duration(seconds: 2),
+          _clearRecognizedCommand,
+        );
         await _voiceCommandService.handleVoiceCommand(
           command: command,
           context: context,
           appSettings: appSettings,
+          onStopListening: () {
+            if (mounted) {
+              _commandDisplayTimer?.cancel();
+              _inactivityTimer?.cancel();
+              setState(() {
+                _isVoiceListening = false;
+                _recognizedCommand = null;
+                _statusMessage = null;
+              });
+            }
+          },
         );
       },
-      onError: (error) => print('Voice command error: $error'),
-      onStatus: (status) => print('Voice command status: $status'),
-      onPartialResult: (partial) => print('Partial result: $partial'),
     );
+
+    if (!mounted) return;
+    if (!started) {
+      _inactivityTimer?.cancel();
+      setState(() {
+        _isVoiceListening = false;
+        _recognizedCommand = null;
+        _statusMessage = null;
+      });
+    }
   }
 
   void _showHelpDialog(BuildContext context) async {

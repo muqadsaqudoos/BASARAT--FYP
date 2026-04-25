@@ -7,7 +7,7 @@ import '../models/detection.dart';
 /// Base URL for detection API.
 /// - Emulator: http://10.0.2.2:8000
 /// - Physical device: http://YOUR_LAN_IP:8000 (e.g. http://192.168.1.100:8000)
-const String kDetectionBaseUrlDefault = 'http://192.168.1.72:8000';
+const String kDetectionBaseUrlDefault = 'https://hamna-k-basarat-api.hf.space';
 
 /// Configurable base URL (no trailing slash). Override for physical device.
 String detectionBaseUrl = kDetectionBaseUrlDefault;
